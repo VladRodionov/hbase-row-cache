@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd"
+         xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>org.bigbase</groupId>
+    <artifactId>row-cache</artifactId>
+    <packaging>jar</packaging>
+    <name>BigBase2 Row Cache</name>
+    <url>http://www.server.com</url>
+    <parent>
+        <groupId>org.bigbase</groupId>
+        <artifactId>BigBase2</artifactId>
+        <version>1.0.0</version>
+    </parent>
+    <dependencies>
+        <dependency>
+         	<groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-core</artifactId>
+	</dependency>
+<!--dependency>
+	<groupId>commons-logging</groupId>
+	<artifactId>commons-logging</artifactId>
+	<version>1.1.1</version>
+</dependency-->
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-common</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-client</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-server</artifactId>
+            <version>${hbase.version}</version>
+        </dependency>
+
+<dependency>
+	<groupId>org.apache.hbase</groupId>
+	<artifactId>hbase-testing-util</artifactId>
+	<version>${hbase.version}</version>
+</dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-auth</artifactId>
+            <version>${hadoop.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-hdfs</artifactId>
+            <version>${hadoop.version}</version>
+        </dependency>
+        <!--dependency>
+            <groupId>org.apache.hbase</groupId>
+            <artifactId>hbase-tests</artifactId>
+            <version>0.96.2</version>
+            <scope>test</scope> 
+       </dependency-->
+
+        <dependency>
+            <groupId>org.bigbase</groupId>
+            <artifactId>carrot-cache</artifactId>
+        </dependency>
+        <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+           </dependency>
+    </dependencies>
+</project>
