@@ -73,5 +73,11 @@
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
            </dependency>
+	   <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-math3</artifactId>
+                <version>3.6.1</version>
+                <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

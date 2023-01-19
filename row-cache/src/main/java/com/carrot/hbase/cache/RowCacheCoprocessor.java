@@ -104,7 +104,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
        
     LOG.info("[row-cache][preClose] " + c.getEnvironment().getRegion().getRegionInfo().toString());
     // We disabled preClose --?????
-    //rowCache.preClose(c.getEnvironment().getRegion().getTableDesc(), abortRequested);
+    //rowCache.preClose(c.getEnvironment().getRegion().getTableDescriptor(), abortRequested);
   }
 
   /* (non-Javadoc)
@@ -216,7 +216,9 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
   {
 
       boolean result = rowCache.preExists(e.getEnvironment().getRegion().getTableDescriptor(), get, exists);
-      if( result == true) e.bypass();
+      if(result == true) {
+        e.bypass();
+      }
       return result;
   }
 
@@ -226,13 +228,10 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
   @Override
   public void preGetOp(ObserverContext<RegionCoprocessorEnvironment> e,
       Get get, List<Cell> results) throws IOException {
-    
-    //*DEBUG*/ LOG.info("Coproc preGet obj=" + this + " thread=" + 
-    //Thread.currentThread().getName() + " count=" + (count++)); 
-    //Thread.dumpStack();
     boolean bypass = rowCache.preGet(e.getEnvironment().getRegion().getTableDescriptor(), get, results);
-      if(bypass) e.bypass();
-    
+    if(bypass) {
+      e.bypass();
+    }
   }
 
   /* (non-Javadoc)
@@ -287,7 +286,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
       byte[] family, byte[] qualifier, CompareOperator op, ByteArrayComparable comparator, Put put,
       boolean result) throws IOException {
     if (result) {
-      rowCache.preCheckAndPut(c.getEnvironment().getRegion().getTableDescriptor(), 
+      rowCache.postCheckAndPut(c.getEnvironment().getRegion().getTableDescriptor(), 
         row, family, qualifier, put, result);
     }
     return result;
@@ -298,7 +297,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
       byte[] family, byte[] qualifier, CompareOperator op, ByteArrayComparable comparator,
       Delete delete, boolean result) throws IOException {
     if (result) {
-      rowCache.preCheckAndDelete(c.getEnvironment().getRegion().getTableDescriptor(), 
+      rowCache.postCheckAndDelete(c.getEnvironment().getRegion().getTableDescriptor(), 
         row, family, qualifier, delete, result);
     }
     return result;  
@@ -308,7 +307,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
   public boolean postCheckAndPut(ObserverContext<RegionCoprocessorEnvironment> c, byte[] row,
       Filter filter, Put put, boolean result) throws IOException {
     if (result) {
-      rowCache.preCheckAndPut(c.getEnvironment().getRegion().getTableDescriptor(), 
+      rowCache.postCheckAndPut(c.getEnvironment().getRegion().getTableDescriptor(), 
         row, null, null, put, result);
     }  
     return result;
@@ -318,7 +317,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
   public boolean postCheckAndDelete(ObserverContext<RegionCoprocessorEnvironment> c, byte[] row,
       Filter filter, Delete delete, boolean result) throws IOException {
     if (result) {
-      rowCache.preCheckAndDelete(c.getEnvironment().getRegion().getTableDescriptor(), 
+      rowCache.postCheckAndDelete(c.getEnvironment().getRegion().getTableDescriptor(), 
         row, null, null, delete, result);
     }  
     return result;
@@ -342,7 +341,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
     }
     return result;
   }
-
+  
   public RowCache getCache()
   {
     return rowCache;

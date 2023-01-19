@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -159,12 +160,10 @@ public class RowCache {
    *  Query (GET) context (thread local). 
    */
   private static ThreadLocal<RequestContext> contextTLS = new ThreadLocal<RequestContext>() {
-
     @Override
     protected RequestContext initialValue() {
       return new RequestContext();
     }
-
   };
 
   /*
@@ -362,10 +361,6 @@ public class RowCache {
       String domainName = sconfig.getJMXDomainName();
       LOG.info(String.format("row-cache JMX enabled for data cache, domain=%s\n", domainName));
       rowCache.registerJMXMetricsSink(domainName);
-      Cache victimCache = rowCache.getVictimCache();
-      if (victimCache != null) {
-        victimCache.registerJMXMetricsSink(domainName);
-      }
     }
     if (cacheType != CacheType.HYBRID) {
       LOG.info(String.format("Initialized cache[%s]\n", rowCache.getName()));
@@ -441,6 +436,14 @@ public class RowCache {
     return buf;
   }
 
+  private synchronized void ensureBufferCapacity(int required) {
+    int currentCapacity = bufTLS.get().capacity();
+    if (currentCapacity >= required) {
+      return;
+    }
+    ByteBuffer buf = ByteBuffer.allocate(required);
+    bufTLS.set(buf);
+  }
   /**
    * Stop.
    * 
@@ -469,12 +472,20 @@ public class RowCache {
       ColumnFamilyDescriptor[] coldesc = desc.getColumnFamilies();
       for (ColumnFamilyDescriptor d : coldesc) {
         int ttl = d.getTimeToLive();
-        byte[] key = Bytes.add(tableName.toBytes(), d.getName());
+        byte[] key = getTableFamilyKey(tableName.getName(), d.getName());
         familyTTLMap.put(key, ttl);
       }
     }
   }
 
+  private byte[] getTableFamilyKey(byte[] tableBytes, byte[] famBytes ) {
+    byte[] key = new byte[tableBytes.length + famBytes.length + 1];
+    System.arraycopy(tableBytes, 0, key, 0, tableBytes.length);
+    // it has '0' in between table and family. Not sure if 0 is allowed
+    System.arraycopy(famBytes, 0, key, tableBytes.length + 1, famBytes.length);
+    return key;
+  }
+  
   /**
    * Pre - bulkLoad HFile. Bulk load for CF with rowcache enabled is not a good
    * practice and should be avoided as since we clear all cache entries for this
@@ -495,6 +506,9 @@ public class RowCache {
     // TODO - OPTIMIZE!!!
     // This MUST be blocking operation
     // Disable cache for read operations only
+    // This works ONLY if no existing row is updated during the operation
+    // Bulk loads adds ONLY new rows to the table
+    
     if (isDisabled()) {
       LOG.info("[row-cache][preBulkLoadHFile] Cache disabled, skip operation.");
       return;
@@ -513,6 +527,7 @@ public class RowCache {
     if (setDisabled(true) == false)
       return;
     // Run cache cleaning in a separate thread
+    //TODO: is not done yet
     clearCache();
 
   }
@@ -563,7 +578,7 @@ public class RowCache {
 
   /**
    * Append operation works only for fully qualified columns (with
-   * versions).
+   * versions). Is that right?
    * 
    * @param tableDesc
    *          the table desc
@@ -574,22 +589,10 @@ public class RowCache {
    *           Signals that an I/O exception has occurred.
    */
 
-  public Result preAppend(TableDescriptor tableDesc, Append append)
-      throws IOException {
-    if (isDisabled())
-      return null;
-    try {
-      mutationsInProgress.incrementAndGet();
-      TableName tableName = tableDesc.getTableName();
-      byte[] row = append.getRow();
-      // TODO optimize
-      Set<byte[]> families = append.getFamilyCellMap().keySet();
-      // Invalidate list of family keys
-      invalidateKeys(tableName, row, families);
-      return null;
-    } finally {
-      mutationsInProgress.decrementAndGet();
-    }
+  public Result preAppend(TableDescriptor tableDesc, Append append) throws IOException {
+    if (isDisabled()) return null;
+    processMutation(tableDesc, append);
+    return null;
   }
 
   /**
@@ -612,7 +615,7 @@ public class RowCache {
   }
 
   /**
-   *  pre check and delete.
+   *  Post check and delete.
    * 
    * @param tableDesc
    *          the table desc
@@ -630,50 +633,14 @@ public class RowCache {
    * @throws IOException
    *           Signals that an I/O exception has occurred.
    */
-  public boolean preCheckAndDelete(TableDescriptor tableDesc, byte[] row,
+  public boolean postCheckAndDelete(TableDescriptor tableDesc, byte[] row,
       byte[] family, byte[] qualifier, Delete delete, boolean result)
       throws IOException {
-
-    doDeleteOperation(tableDesc, delete);
-    return result;
-  }
-
-  /**
-   * TODO: we ignore timestamps and delete everything delete
-   * 'family:column' deletes all versions delete 'family' - deletes entire
-   * family delete 'row' - deletes entire row from cache
-   * 
-   * We ignore time range and timestamps when we do delete from cache.
-   * 
-   * @param tableDesc
-   *          the table desc
-   * @param delete
-   *          the delete
-   * @throws IOException
-   *           Signals that an I/O exception has occurred.
-   */
-  private void doDeleteOperation(TableDescriptor tableDesc, Delete delete)
-      throws IOException {
-
-    if (isDisabled())
-      return;
-
-    try {
-      mutationsInProgress.incrementAndGet();
-      TableName tableName = tableDesc.getTableName();
-      byte[] row = delete.getRow();
-
-      Set<byte[]> families = delete.getFamilyCellMap().keySet();
-      if (families.size() == 0) {
-        // we delete entire ROW
-        families = getFamiliesForTable(tableDesc);
-      }
-      // Invalidate list of family keys
-
-      invalidateKeys(tableName, row, families);
-    } finally {
-      mutationsInProgress.decrementAndGet();
+    if (isDisabled()) {
+      return result;
     }
+    processMutation(tableDesc, delete);
+    return result;
   }
 
   /**
@@ -707,21 +674,21 @@ public class RowCache {
    * @throws IOException
    *           Signals that an I/O exception has occurred.
    */
-  private void delete(TableName tableName, byte[] row, byte[] family, byte[] column)
+  private boolean delete(TableName tableName, byte[] row, byte[] family, byte[] column)
       throws IOException {
     ByteBuffer buf = getLocalBuffer(); 
 
     prepareKeyForGet(buf, tableName.getName(), row, 0, row.length, family, column);
     buf.flip();
-    //long ptr = UnsafeAccess.address(buf);
     int size = buf.getInt();
     byte[] data = buf.array();
-    rowCache.delete(data, 4, size);
+    return rowCache.delete(data, 4, size);
   }
 
   /**
    * 
-   * Post checkAndPut.
+   * Post checkAndPut This method is called only
+   * if check succeeded
    * 
    * @param tableDesc
    *          the table desc
@@ -740,52 +707,21 @@ public class RowCache {
    *           Signals that an I/O exception has occurred.
    */
 
-  public boolean preCheckAndPut(TableDescriptor tableDesc, byte[] row,
+  public boolean postCheckAndPut(TableDescriptor tableDesc, byte[] row,
       byte[] family, byte[] qualifier, Put put, boolean result)
       throws IOException {
 
-    // Do put if result of check is true
-    doPutOperation(tableDesc, put);
+    if (isDisabled()) {
+      return result;
+    }
+    processMutation(tableDesc, put);
     return result;
   }
 
  
   /**
-   * CHECKED 2 Do put operation.
-   * 
-   * @param tableDesc
-   *          the table desc
-   * @param put
-   *          the put
-   * @throws IOException
-   *           Signals that an I/O exception has occurred.
-   */
-  private void doPutOperation(TableDescriptor tableDesc, Put put)
-      throws IOException {
-
-    // LOG.error("PrePUT executed \n ");
-    // /*DEBUG*/dumpPut(put);
-
-    if (isDisabled())
-      return;
-
-    try {
-      mutationsInProgress.incrementAndGet();
-      TableName tableName = tableDesc.getTableName();
-      byte[] row = put.getRow();
-
-      Set<byte[]> families = put.getFamilyCellMap().keySet();
-
-      // Invalidate list of family keys
-
-      invalidateKeys(tableName, row, families);
-    } finally {
-      mutationsInProgress.decrementAndGet();
-    }
-  }
-
-  /**
-   * Post get operation: 1. We update data in cache
+   * Post get operation:
+   *  We update data in the cache with new cells
    * 
    * @param tableDesc
    *          the table desc
@@ -802,7 +738,6 @@ public class RowCache {
 
     try {
       // TODO with postGet and disabled
-
       if (isDisabled()) {
         return;
       }
@@ -826,7 +761,6 @@ public class RowCache {
       byte[] row = get.getRow();
       for (int index = 0; index < results.size();) {
         index = processFamilyForPostGet(index, results, row, tableDesc, bundle);
-        //LOG.info("postGet: index=" + index + " results.size=" + results.size() + " bundle.size=" + bundle.size());
         bundle.clear();
       }
 
@@ -854,6 +788,7 @@ public class RowCache {
     byte[] family = getFamily(results.get(0));
     byte[] column = getColumn(results.get(0));
     // FIXME - optimize TTL
+    // We can get this value from TTL map
     int ttl = tableDesc.getColumnFamily(family).getTimeToLive();
 
     int count = 0;
@@ -921,6 +856,9 @@ public class RowCache {
    * with all versions in a given bundle. It updates family KEY =
    * 'table:rowkey:family' as well to keep track of all cached columns
    * 
+   * ATTENTION: this method requires 'results/ to be sorted
+   * by family.
+   * 
    * @param index
    *          the index
    * @param results
@@ -972,6 +910,7 @@ public class RowCache {
       }
     }
     // We do caching ONLY if ROWCACHE is set for 'table' or 'cf'
+    //TODO: optimize, move this check up and add skipping family code
     if (isRowCacheEnabledForFamily(tableDesc, family)) {
       // Do only if it ROWCACHE is set for the family
       upsertFamilyColumns(tableName, row, family, bundle);
@@ -1057,7 +996,12 @@ public class RowCache {
     if (bundle.size() == 0) return;
     // Get first
     ByteBuffer buf = getLocalBuffer();
-
+    int requiredSize = familySize(tableName, row, family, bundle);
+    ensureBufferCapacity(requiredSize);
+    buf = getLocalBuffer();
+    
+    // We need method to get required buffer size for the list of cells 
+    // plus key
     try {
       prepareKeyForPut(buf, tableName.toBytes(), row, 0, row.length, family, null);
       // buffer position is at beginning of a value block
@@ -1082,7 +1026,32 @@ public class RowCache {
     }
     doPut(buf);
   }
-
+  
+  private int familySize (TableName tableName, byte[] row, byte[] family, List<Cell> list) {
+    int size = keySize(tableName.toBytes().length, row.length, family.length, 0);
+    
+    size += 4 ;//number of columns
+    
+    byte[] column = getColumn(list.get(0));
+    size += 4 + column.length; // could be reduced
+    size += 4;// number of versions
+    for (int i = 0; i < list.size(); i++) {
+      byte[] col = getColumn(list.get(i));
+      if (Bytes.compareTo(column, col) == 0) {
+        size += cellSize(list.get(i));
+      } else {
+        column = col;
+        size += 4 + column.length;
+        size += 4; // number of versions
+      }
+    }
+    return size;
+  }
+  
+  private int cellSize(Cell cell) {
+    return 12 /* timestamp(8)+ value size (4)*/ + cell.getValueLength();
+  }
+  
   /**
    * Add column.
    * 
@@ -1108,7 +1077,7 @@ public class RowCache {
     skip(buf, Bytes.SIZEOF_INT);
 
     while (Bytes.equals(column, col)) {
-      size += addKeyValue(buf, bundle.get(0));
+      size += addCell(buf, bundle.get(0));
       totalVersions++;
       bundle.remove(0);
       if (bundle.size() == 0)
@@ -1119,8 +1088,7 @@ public class RowCache {
     buf.putInt(startPosition, totalVersions);
     return size;
   }
-
-
+  
   /**
    * Do put.
    * 
@@ -1129,13 +1097,12 @@ public class RowCache {
    * @throws IOException
    *           Signals that an I/O exception has occurred.
    */
-  private final void doPut(ByteBuffer kv) throws IOException {
-    //long ptr = UnsafeAccess.address(kv);
+  private final boolean doPut(ByteBuffer kv) throws IOException {
     kv.flip();
-    int keySize = kv.getInt();//UnsafeAccess.toInt(ptr);
-    int valueSize = kv.getInt();//.toInt(ptr + 4);
+    int keySize = kv.getInt();
+    int valueSize = kv.getInt();
     byte[] buf = kv.array();
-    boolean result = rowCache.put(buf, 8, keySize, buf, 8 + keySize, valueSize, 0);   
+    return rowCache.put(buf, 8, keySize, buf, 8 + keySize, valueSize, 0);   
   }
 
   /**
@@ -1147,7 +1114,7 @@ public class RowCache {
    *          the kv
    * @return the int
    */
-  private int addKeyValue(ByteBuffer buf, Cell kv) {
+  private int addCell(ByteBuffer buf, Cell kv) {
 
     // Format:
     // 8 bytes - ts
@@ -1204,25 +1171,45 @@ public class RowCache {
    * @throws IOException
    *           Signals that an I/O exception has occurred.
    */
-  public Result preIncrement(TableDescriptor tableDesc, Increment increment,
-      Result result) throws IOException {
+  public Result preIncrement(TableDescriptor tableDesc, Increment increment, Result result)
+      throws IOException {
 
     if (isTrace()) {
-      LOG.info("[row-cache] preIncrement: " + increment + " disabled="
-          + isDisabled());
+      LOG.info("[row-cache] preIncrement: " + increment + " disabled=" + isDisabled());
     }
     if (isDisabled()) {
       return null;
     }
+    processMutation(tableDesc, increment);
+    return result;
+  }
+
+  /**
+   * TODO: we ignore timestamps and delete everything delete
+   * 'family:column' deletes all versions delete 'family' - deletes entire
+   * family delete 'row' - deletes entire row from cache
+   * 
+   * We ignore time range and timestamps when we do delete from cache.
+   * 
+   * @param tableDesc
+   *          the table desc
+   * @param delete
+   *          the delete
+   * @throws IOException
+   *           Signals that an I/O exception has occurred.
+   */
+  private void processMutation(TableDescriptor tableDesc, Mutation mutation) throws IOException {
     try {
       mutationsInProgress.incrementAndGet();
-      // if(result == null || result.isEmpty()) return result;
       TableName tableName = tableDesc.getTableName();
-      byte[] row = increment.getRow();
-      Set<byte[]> families = increment.getFamilyCellMap().keySet();
+      byte[] row = mutation.getRow();
+      Set<byte[]> families = mutation.getFamilyCellMap().keySet();
+      if (families.size() == 0 && mutation instanceof Delete) {
+        // we delete entire ROW
+        families = getFamiliesForTable(tableDesc);
+      }
       // Invalidate list of family keys
       invalidateKeys(tableName, row, families);
-      return result;
     } finally {
       mutationsInProgress.decrementAndGet();
     }
@@ -1272,8 +1259,10 @@ public class RowCache {
    */
   public void preDelete(TableDescriptor tableDesc, Delete delete)
       throws IOException {
-    // if(RowCache.isDisabled()) return ;
-    doDeleteOperation(tableDesc, delete);
+    if (isDisabled()) {
+      return;
+    }
+    processMutation(tableDesc, delete);
   }
 
   /**
@@ -1295,7 +1284,6 @@ public class RowCache {
 
     if (isDisabled())
       return exists;
-
     List<Cell> results = new ArrayList<Cell>();
     try {
       preGet(tableDesc, get, results);
@@ -1336,25 +1324,26 @@ public class RowCache {
       byte[] columnFamily) throws IOException {
     List<Cell> result = new ArrayList<Cell>();
     ByteBuffer buf = getLocalBuffer();
-//    long bufptr = UnsafeAccess.address(buf);
-//    
-//    /*DEBUG*/
-//    if (bufptr == 0) {
-//      LOG.error("bufptr=0");
-//    }
+
     prepareKeyForGet(buf, tableName, row, 0, row.length, columnFamily, null);
     byte[] bbuf = buf.array();
 
     int keySize = UnsafeAccess.toInt(bbuf, 0);
  
-    //buf.position(keySize + 4);
     int off = 4 + keySize;
-    //int avail = buf.capacity() - buf.position();
     int avail = bbuf.length - off;
     long len = rowCache.get(bbuf, 4, keySize, true, bbuf, off);
-    if (len > avail) {
-      //TODO 
-      throw new IOException("buffer overflow, avail=" + avail + " required="+ len);
+    // Check if we have buffer overflow
+    while (len > avail) {
+      ensureBufferCapacity((int)(len + off));
+      buf = getLocalBuffer();
+      byte[] bb = buf.array();
+      // Copy key
+      System.arraycopy(bbuf,  0,  bb,  0,  keySize + 4);
+      // repeat call
+      avail = bb.length - off;
+      bbuf = bb;
+      len = rowCache.get(bbuf, 4, keySize, true, bbuf, off);
     }
     if (len < 0) {
       // NOT FOUND Return empty list
@@ -1386,32 +1375,6 @@ public class RowCache {
 
     return result;
   }
-
-
-  /**
-   * We skip column which is not a part of a request.
-   * 
-   * @param buf
-   *          the buf
-   * @return the long
-   */
-//  private long skipColumn(long buf) {
-//
-//    int csize = UnsafeAccess.toInt(buf);
-//    buf += 4 + csize;
-//
-//    int totalVersions = UnsafeAccess.toInt(buf);
-//    buf += 4;
-//    int i = 0;
-//
-//    while (i++ < totalVersions) {
-//      buf += 8;
-//      int valueSize = UnsafeAccess.toInt(buf);
-//      buf += 4 + valueSize;
-//    }
-//    return buf;
-//  }
-
   
   /**
    * We skip column which is not a part of a request.
@@ -1680,10 +1643,11 @@ public class RowCache {
   public boolean preGet(TableDescriptor desc, Get get, List<Cell> results)
       throws IOException {
 
-    if (isDisabled())
+    if (isDisabled()) {
       return false;
+    }
     if (isTrace()){
-      LOG.info("[row-cache][trace][preGet]: " + get);
+      LOG.error("[row-cache][trace][preGet]: " + get);
     }
     updateRequestContext(get);
 
@@ -1692,7 +1656,7 @@ public class RowCache {
       Map<byte[], NavigableSet<byte[]>> map = ctxt.getFamilyMap();
       for (byte[] f : map.keySet()) {
         NavigableSet<byte[]> set = map.get(f);
-        LOG.info("[row-cache] " + new String(f) + " has " + (set != null? map.get(f).size(): null)
+        LOG.error("[row-cache] " + new String(f) + " has " + (set != null? map.get(f).size(): null)
             + " columns");
       }
     }
@@ -1718,14 +1682,13 @@ public class RowCache {
           toDelete.add(columnFamily);
         }
       }
-
     }
 
     // Delete families later to avoid concurrent modification exception
     deleteFrom(get, toDelete);
 
     if (isTrace()){
-      LOG.info("[row-cache][trace][preGet] found " + results.size());
+      LOG.error("[row-cache][trace][preGet] found " + results.size());
     }
     // DEBUG ON
     fromCache = results.size();
@@ -1741,7 +1704,7 @@ public class RowCache {
       return true;
     }
     if (isTrace())
-      LOG.info("[row-cache][trace][preGet]: send to HBase " + get);
+      LOG.error("[row-cache][trace][preGet]: send to HBase " + get);
     // Finish preGet
     return false;
   }
@@ -1792,8 +1755,7 @@ public class RowCache {
       return true;
     }
 
-    // FIXME - This is not safe
-    byte[] key = Bytes.add(tableName, columnFamily);
+    byte[] key = getTableFamilyKey(tableName, columnFamily);
     Integer ttl = null;
     synchronized (familyTTLMap) {
       ttl = familyTTLMap.get(key);
@@ -1803,7 +1765,6 @@ public class RowCache {
         familyTTLMap.put(key, ttl);
       }
     }
-
     boolean foundFamily = false;
     List<Cell> res = readFamily(tableName, row, columnFamily);
     foundFamily = res.size() > 0;
@@ -1919,6 +1880,11 @@ public class RowCache {
         2 + size + // row
         ((columnFamily != null) ? (2 + columnFamily.length) : 0) + // family
         ((column != null) ? (4 + column.length) : 0); // column
+    if (totalSize + 4 > buf.capacity()) {
+      ensureBufferCapacity(totalSize);
+      buf = bufTLS.get();
+    }
+    
     buf.putInt(totalSize);
     // 4 bytes to keep key length;
     buf.putShort((short) tableName.length);
@@ -1938,59 +1904,6 @@ public class RowCache {
 
   }
 
-  /**
-   * Prepare key for get.
-   * 
-   * @param buf
-   *          the buf
-   * @param tableName
-   *          the table name
-   * @param row
-   *          the row
-   * @param offset
-   *          the offset
-   * @param size
-   *          the size
-   * @param columnFamily
-   *          the column family
-   * @param column
-   *          the column
-   */
-//  private void prepareKeyForGet(long buf, byte[] tableName, byte[] row,
-//      int offset, int size, byte[] columnFamily, byte[] column) {
-//
-//    int totalSize = 2 + tableName.length + // table
-//        2 + size + // row
-//        ((columnFamily != null) ? (2 + columnFamily.length) : 0) + // family
-//        ((column != null) ? (4 + column.length) : 0); // column
-//    UnsafeAccess.putInt(buf, totalSize);
-//    buf += 4;
-//    // 4 bytes to keep key length;
-//    UnsafeAccess.putShort(buf, (short) tableName.length);
-//    buf += 2;
-//    UnsafeAccess.copy(tableName, 0, buf, tableName.length);
-//    buf += tableName.length;
-//    UnsafeAccess.putShort(buf, (short) size);
-//    buf += 2;
-//    UnsafeAccess.copy(row, offset, buf, size);
-//    buf += size;
-//
-//    if (columnFamily != null) {
-//      UnsafeAccess.putShort(buf, (short) columnFamily.length);
-//      buf += 2;
-//      UnsafeAccess.copy(columnFamily, 0, buf, columnFamily.length);
-//      buf += columnFamily.length;
-//    }
-//    if (column != null) {
-//      UnsafeAccess.putShort(buf, (short) column.length);
-//      buf += 2;
-//      UnsafeAccess.copy(column, 0, buf, column.length);
-//      buf += column.length;
-//    }
-//    // prepare for read
-//    // buf.flip();
-//
-//  }
 
   /**
    * Prepare key for Get op.
@@ -2018,6 +1931,10 @@ public class RowCache {
         2 + size + // row
         ((columnFamily != null) ? (2 + columnFamily.length) : 0) + // family
         ((column != null) ? (4 + column.length) : 0); // column
+   if (totalSize + 4 > buf.capacity()) {
+     ensureBufferCapacity(totalSize + 4);
+     buf = bufTLS.get();
+   }
     buf.putInt(totalSize);
     // 4 bytes to keep key length;
     // skip 4 bytes for Value length
@@ -2038,7 +1955,10 @@ public class RowCache {
     // buf.flip();
   }
 
- 
+  private int keySize (int tableSize, int rowSize, int familySize, int columnSize) {
+    return 4 + 2 + tableSize + 2 + rowSize + 2 + familySize ; // columnSize always 0 yet
+  }
+  
   /**
    * Post put - do put operation.
    * 
@@ -2050,7 +1970,10 @@ public class RowCache {
    *           Signals that an I/O exception has occurred.
    */
   public void prePut(TableDescriptor tableDesc, Put put) throws IOException {
-    doPutOperation(tableDesc, put);
+    if (isDisabled()) {
+      return;
+    }
+    processMutation(tableDesc, put);
   }
 
   /**
@@ -2081,6 +2004,7 @@ public class RowCache {
     return false;
   }
 
+  
   /**
    * Checks if is row cache enabled for family.
    * 

@@ -29,25 +29,32 @@ import java.util.TreeSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.math3.distribution.ZipfDistribution;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
+import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
+import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Logger;
-import org.apache.commons.math3.distribution.ZipfDistribution;
 
 import com.carrot.cache.Cache;
 import com.carrot.cache.Scavenger;
@@ -57,11 +64,12 @@ import com.carrot.cache.io.SegmentScanner;
 import com.carrot.cache.util.CarrotConfig;
 import com.carrot.cache.util.Utils;
 import com.carrot.hbase.cache.utils.IOUtils;
+//import com.carrot.sidecar.file.SidecarLocalFileSystem;
 
 /**
- * RowCache multi-threaded performance test
+ * HBase + RowCache multi-threaded performance test
  */
-public class PerfTest {
+public class HBasePerfTest {
 
   static enum WorkloadType {
     UNIFORM(0.0),
@@ -166,7 +174,7 @@ public class PerfTest {
   private static long cacheItemsLimit;
   
   /** Number of client threads. */
-  private static int clientThreads = 8; // by default
+  private static int clientThreads = 1; // by default
 
   /** Number of PUT operations. */
   private static AtomicLong PUTS = new AtomicLong(0);
@@ -190,8 +198,6 @@ public class PerfTest {
   protected static byte[][] COLUMNS =
       { "col_a".getBytes(), "col_b".getBytes(), "col_c".getBytes() };
 
-  /** The data. */
-  static List<List<Cell>> data;
 
   /** The cache. */
   static RowCache cache;
@@ -203,7 +209,7 @@ public class PerfTest {
   /** The max versions. */
   static int maxVersions = 10;
 
-  static int scavNumberThreads = 2;
+  static int scavNumberThreads = 1;
   
   static String ssrow = "row-xxx-xxx-xxx";
   /** The s row. */
@@ -211,11 +217,29 @@ public class PerfTest {
 
   static Path dataDir;
 
-  static CacheType cacheType = CacheType.HYBRID;
+  static CacheType cacheType = CacheType.OFFHEAP;
   
   static WorkloadType workloadType = WorkloadType.ZIPFIAN;
   
   static ZipfDistribution dist ;
+  
+  /** The util. */
+  private static HBaseTestingUtility UTIL = new HBaseTestingUtility();  
+  
+  /** The cp class name. */
+  private static String CP_CLASS_NAME = RowCacheCoprocessor.class.getName();
+  
+  /** The cluster. */
+  static MiniHBaseCluster cluster;
+  
+  /** The _table c. */
+  static HTable _tableA;
+  
+  /* HBase cluster connection */
+  static Connection conn;
+  
+  /* HBase Admin interface*/
+  static Admin admin;
 
   /**
    * The main method.
@@ -226,7 +250,7 @@ public class PerfTest {
   public final static void main(String[] args) throws Exception {
     
     parseArgs(args);
-    initCache();
+    init();
     printTestParameters();
     String[] keyPrefix = new String[clientThreads];
     for (int i = 0; i < clientThreads; i++) {
@@ -235,15 +259,15 @@ public class PerfTest {
     long t1 = System.currentTimeMillis();
     ExecuteThread[] threads = startTest(keyPrefix, clientThreads);
     StatsCollector collector = new StatsCollector(statsInterval, threads);
-    LOG.info("Test started");
+    LOG.error("Test started");
     collector.start();
     waitToFinish(threads);
     collector.stop();
     Scavenger.waitForFinish();
     // Dump some stats
     long t2 = System.currentTimeMillis();
-    LOG.info("Total time=" + (t2 - t1) + " ms");
-    LOG.info("Estimated RPS=" + ((double) (PUTS.get() + GETS.get()) * 1000) / (t2 - t1));
+    LOG.error("Total time=" + (t2 - t1) + " ms");
+    LOG.error("Estimated RPS=" + ((double) (PUTS.get() + GETS.get()) * 1000) / (t2 - t1));
     
     dumpStats();
     
@@ -251,7 +275,7 @@ public class PerfTest {
   }
   
   private static void printTestParameters() {
-    LOG.info("Test parameters:"
+    LOG.error("Test parameters:"
     + "\n            Workload=" + workloadType 
     + "\n               Cache=" + cacheType 
     + "\n          Cache size=" + nativeCache.getMaximumCacheSize()
@@ -280,15 +304,15 @@ public class PerfTest {
     Segment[] segments = nativeCache.getSegmentsSorted();
     for (Segment seg: segments) {
       if (seg == null) {
-        LOG.info("null");
+        LOG.error("null");
         continue;
       }
       if (seg.isSealed() == false) {
-        LOG.info("Segment id=" + seg.getId() + " is not sealed, offheap=" + seg.isOffheap());
+        LOG.error("Segment id=" + seg.getId() + " is not sealed, offheap=" + seg.isOffheap());
         seg.seal();
       }
       if (seg.isRecycling()) {
-        LOG.info("Segment id=" + seg.getId() + " is recycling");
+        LOG.error("Segment id=" + seg.getId() + " is recycling");
       }
       dumpSegments(seg);
     }
@@ -327,7 +351,7 @@ public class PerfTest {
       sc.next();
     }
     
-    LOG.info("Segment id=" + seg.getId() + " creation time=" + seg.getInfo().getCreationTime() + 
+    LOG.error("Segment id=" + seg.getId() + " creation time=" + seg.getInfo().getCreationTime() + 
       " total=" + total + " active =" + alive + " minId=" + minId + " maxId=" + maxId + " datsSize=" 
         + seg.getSegmentDataSize());
 
@@ -335,21 +359,22 @@ public class PerfTest {
 
   /**
    * Initializes the cache.
-   * @throws IOException Signals that an I/O exception has occurred.
+   * @throws Exception 
    */
-  private static void initCache() throws IOException {
-
-    if (data != null) return;
+  private static void init() throws Exception {
 
     long start = System.currentTimeMillis();
-    data = generateData(M);
-    LOG.info("Generating " + M + " rows took: " + (System.currentTimeMillis() - start) + " ms");
-    LOG.info("Allocated JVM heap: "
+    LOG.error("Generating " + M + " rows took: " + (System.currentTimeMillis() - start) + " ms");
+    LOG.error("Allocated JVM heap: "
         + (Runtime.getRuntime().maxMemory() - Runtime.getRuntime().freeMemory()));
-    Configuration conf = new Configuration();
+    
+    Configuration conf = UTIL.getConfiguration();
+    conf.set(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY, CP_CLASS_NAME);
+    conf.set("hbase.zookeeper.useMulti", "false");
+    
     // Cache configuration
     dataDir = Files.createTempDirectory("temp");
-    LOG.info("Data directory: " + dataDir);
+    LOG.error("Data directory: " + dataDir);
     // Cache configuration
     
     conf.set(CarrotConfig.CACHE_ROOT_DIR_PATH_KEY, dataDir.toString());
@@ -378,14 +403,42 @@ public class PerfTest {
     }
     
     initForZipfianAndHybridConfiguration(conf);
-    
-    cache = new RowCache();
-    cache.start(conf);
-    nativeCache = cache.getCache();
+    //conf.set("fs.file.impl", SidecarLocalFileSystem.class.getName());
+    // Enable snapshot
+    UTIL.startMiniCluster(1);
+    cluster = UTIL.getMiniHBaseCluster();
+
     createTables();
+    createHBaseTables();
+    
+    while(RowCache.instance == null) {
+      try {
+        Thread.sleep(1000);
+        LOG.error("WAIT 1s for row cache to come up");
 
+      } catch (InterruptedException e) {
+        // TODO Auto-generated catch block
+        e.printStackTrace();
+      }
+    }
+    
+    cache = RowCache.instance;
+    //cache.setTrace(true);
+    nativeCache = cache.getCache();
   }
-
+  
+  protected static void createHBaseTables() throws IOException {    
+    Configuration cfg = cluster.getConf();
+    conn = ConnectionFactory.createConnection(cfg);
+    admin = conn.getAdmin();
+    
+    if( admin.tableExists(tableA.getTableName()) == false){
+      admin.createTable(tableA);
+      LOG.error("Created table "+tableA);
+    }
+    _tableA = (HTable) conn.getTable(TableName.valueOf(TABLE_A));
+  }
+  
   private static void initForZipfianAndHybridConfiguration(Configuration conf) {
  
     if (workloadType == WorkloadType.ZIPFIAN) {
@@ -769,7 +822,7 @@ public class PerfTest {
      * @param key the key
      */
     private void testPerf(String key) {
-      LOG.info("RowCache Performance test. Cache size =" + nativeCache.size() + ": "
+      LOG.error("RowCache Performance test. Cache size =" + nativeCache.size() + ": "
           + Thread.currentThread().getName());
 
       try {
@@ -790,7 +843,7 @@ public class PerfTest {
         while (System.currentTimeMillis() < stopTime ) {
           innerLoop();
         }
-        LOG.info(getName() + ": Finished.");
+        LOG.error(getName() + ": Finished.");
       } catch (Exception e) {
         e.printStackTrace();
         LOG.error(e);
@@ -832,10 +885,10 @@ public class PerfTest {
     }
 
     /** To speed get request - pre- construct. */
-    List<byte[]> families = Arrays.asList(new byte[][] { FAMILIES[0] });
+    List<byte[]> families = Arrays.asList(new byte[][] { FAMILIES[0], FAMILIES[1], FAMILIES[2] });
 
     /** The columns. */
-    List<byte[]> columns = Arrays.asList(new byte[][] { COLUMNS[0] });
+    List<byte[]> columns = Arrays.asList(new byte[][] { COLUMNS[0], COLUMNS[1], COLUMNS[2] });
 
     /** The map. */
     Map<byte[], NavigableSet<byte[]>> map = constructFamilyMap(families, columns);
@@ -846,17 +899,14 @@ public class PerfTest {
     private final void innerLoop() {
 
       long tt1 = System.nanoTime();
-      // monkeyCall(tt1);
-      Random r = new Random();
       boolean isReadRequest = isReadRequest();// f > sWriteRatio;
 
       if (isReadRequest) {
         try {
           long l = getNextGetIndex();
           byte[] row = getRow(l);
-          //patchRow(row, 0, l);
           @SuppressWarnings("unused")
-          List<Cell> results = getFromCache(tableA, row, map);
+          List<Cell> results = getFromCache(row, map);
         } catch (Exception e) {
           LOG.error("get native call.", e);
           System.exit(-1);
@@ -864,8 +914,7 @@ public class PerfTest {
       } else {
         try {
           long nextSeqNumber = seqNumber.incrementAndGet();
-          int rowNum = r.nextInt(M);
-          cacheRow(tableA, rowNum, nextSeqNumber);
+          cacheRow(nextSeqNumber);
         } catch (Exception e) {
           e.printStackTrace();
           LOG.error("put call.", e);
@@ -976,7 +1025,7 @@ public class PerfTest {
         t999 /= mThreads.length;
         t9999 /= mThreads.length;
         rps = totalRequests * 1000 / (System.currentTimeMillis() - mStartTime);
-        LOG.info(
+        LOG.error(
               "\n            RPS=" + rps 
             + "\n            MAX=" + max 
             + "\n            AVG=" + avg 
@@ -1091,15 +1140,11 @@ public class PerfTest {
    * @param seqNumber the seq number
    * @throws IOException Signals that an I/O exception has occurred.
    */
-  protected static void cacheRow(TableDescriptor table, int rowNum, long seqNumber)
+  protected static void cacheRow(long seqNumber)
       throws IOException {
-    List<Cell> list = data.get(rowNum);
-    byte[] row = getRow(seqNumber);
-    //patchRow(row, 0, seqNumber);
-    Get get = createGet(row, null, null, null);
-    get.readVersions(Integer.MAX_VALUE);
-    cache.resetRequestContext();
-    cache.postGet(table, get, list);
+    List<Cell> cells = generateRowData((int)seqNumber);
+    Put put = createPut(cells);
+    _tableA.put(put);
   }
 
   /**
@@ -1110,13 +1155,11 @@ public class PerfTest {
    * @return the from cache
    * @throws IOException Signals that an I/O exception has occurred.
    */
-  protected static List<Cell> getFromCache(TableDescriptor table, byte[] row,
+  protected static List<Cell> getFromCache(byte[] row,
       Map<byte[], NavigableSet<byte[]>> map) throws IOException {
     Get get = createGet(row, map, null, null);
-    get.readVersions(1);
-    List<Cell> results = new ArrayList<Cell>();
-    cache.preGet(table, get, results);
-    return results;
+    get.readVersions(maxVersions);
+    return _tableA.get(get).listCells();
   }
 
   /**
@@ -1195,18 +1238,6 @@ public class PerfTest {
     return list;
   }
 
-  /**
-   * Generate data.
-   * @param n the n
-   * @return the list
-   */
-  static List<List<Cell>> generateData(int n) {
-    List<List<Cell>> data = new ArrayList<List<Cell>>();
-    for (int i = 0; i < n; i++) {
-      data.add(generateRowData(i));
-    }
-    return data;
-  }
 
   /**
    * Creates the tables.
@@ -1516,7 +1547,7 @@ public class PerfTest {
    * @param kv the kv
    */
   protected static void dump(Cell kv) {
-    LOG.info(
+    LOG.error(
       "row=" + new String(TestUtils.getRow(kv)) + " family=" + new String(TestUtils.getFamily(kv))
           + " column=" + new String(TestUtils.getQualifier(kv)) + " ts=" + kv.getTimestamp());
   }

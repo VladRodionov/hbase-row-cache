@@ -470,44 +470,44 @@ public class RowCacheTest extends BaseTest{
 	 * @throws IOException Signals that an I/O exception has occurred.
 	 */
 	@Test
-	public void testVerifyGetAfterPreGetCallRowNotCached() throws IOException
-	{
-		LOG.info("Test verify get after preGet row not cached started");	
-		int maxVersions = 5;
-			// This row is not cached yet
-			List<Cell> list = data.get(1);
-			
-			List<byte[]> cols = Arrays.asList(new byte[][] { COLUMNS[0], COLUMNS[2]});
+  public void testVerifyGetAfterPreGetCallRowNotCached() throws IOException {
+    LOG.info("Test verify get after preGet row not cached started");
+    int maxVersions = 5;
+    // This row is not cached yet
+    List<Cell> list = data.get(1);
 
-			Map<byte[], NavigableSet<byte[]>> map = new TreeMap<byte[], NavigableSet<byte[]>>(
-					Bytes.BYTES_COMPARATOR);
+    List<byte[]> cols = Arrays.asList(new byte[][] { COLUMNS[0], COLUMNS[2] });
 
-			map.put(FAMILIES[0], getColumnSet(cols));
-			map.put(FAMILIES[2], getColumnSet(cols));
-			
-			TimeRange tr = TimeRange.between( System.currentTimeMillis() - 100000, System.currentTimeMillis() );
-			
-			Get get = createGet(getRow(list.get(0)), map, tr, null);
-			get.readVersions(maxVersions);
-			List<Cell> results = new ArrayList<Cell>();
-			cache.preGet(tableA, get, results);
-			
-			assertEquals(Integer.MAX_VALUE, get.getMaxVersions());
-			TimeRange trr = get.getTimeRange();
-			assertEquals(0, trr.getMin());
-			assertEquals(Long.MAX_VALUE, trr.getMax());
-			assertNull(get.getFilter());
-			// Assert families have no columns
-			assertEquals(2, get.numFamilies());
-			Map<byte[] , NavigableSet<byte[]>> fmap = get.getFamilyMap();
-			assertTrue( fmap.containsKey(FAMILIES[0]));
-			assertNull( fmap.get(FAMILIES[0]));
-			assertTrue( fmap.containsKey(FAMILIES[2]));
-			assertNull( fmap.get(FAMILIES[2]));
-			assertFalse( fmap.containsKey(FAMILIES[1]));
-			LOG.info("Test verify get after preGet row not cached finished");										
-		
-	}	
+    Map<byte[], NavigableSet<byte[]>> map =
+        new TreeMap<byte[], NavigableSet<byte[]>>(Bytes.BYTES_COMPARATOR);
+
+    map.put(FAMILIES[0], getColumnSet(cols));
+    map.put(FAMILIES[2], getColumnSet(cols));
+
+    TimeRange tr =
+        TimeRange.between(System.currentTimeMillis() - 100000, System.currentTimeMillis());
+
+    Get get = createGet(getRow(list.get(0)), map, tr, null);
+    get.readVersions(maxVersions);
+    List<Cell> results = new ArrayList<Cell>();
+    cache.preGet(tableA, get, results);
+
+    assertEquals(Integer.MAX_VALUE, get.getMaxVersions());
+    TimeRange trr = get.getTimeRange();
+    assertEquals(0, trr.getMin());
+    assertEquals(Long.MAX_VALUE, trr.getMax());
+    assertNull(get.getFilter());
+    // Assert families have no columns
+    assertEquals(2, get.numFamilies());
+    Map<byte[], NavigableSet<byte[]>> fmap = get.getFamilyMap();
+    assertTrue(fmap.containsKey(FAMILIES[0]));
+    assertNull(fmap.get(FAMILIES[0]));
+    assertTrue(fmap.containsKey(FAMILIES[2]));
+    assertNull(fmap.get(FAMILIES[2]));
+    assertFalse(fmap.containsKey(FAMILIES[1]));
+    LOG.info("Test verify get after preGet row not cached finished");
+
+  }
 	
 	/**
 	 * Test put single family column.
