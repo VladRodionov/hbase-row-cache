@@ -850,7 +850,7 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest{
 		assertEquals((N) * FAMILIES.length -1, cache.size());	
 		map = constructFamilyMap(fam, col);
 		get = createGet(row, map, null, null);
-		get.setMaxVersions(Integer.MAX_VALUE);
+		get.readVersions(Integer.MAX_VALUE);
 		result = _tableA.get(get);
 		
 		assertEquals( VERSIONS, result.size());
@@ -952,6 +952,9 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest{
 		// Delete row:family:col
 		del = new Delete(row);
 		del.addColumns(FAMILIES[1], COLUMNS[0]);
+		
+    boolean res = _tableA.checkAndDelete(row, FAMILIES[2], COLUMNS[0], ("value"+(index + 10000000)).getBytes(), del);
+    assertFalse(res);
 		_tableA.checkAndDelete(row, FAMILIES[2], COLUMNS[0], ("value"+index).getBytes(), del);
 		
 		// Verify what is still in cache (only FAMILY[2])
@@ -962,11 +965,9 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest{
 		get = createGet(row, map, null, null);
 		get.setMaxVersions(Integer.MAX_VALUE);
 		result = _tableA.get(get);
-		
 		assertEquals( (FAMILIES.length -1) * COLUMNS.length * VERSIONS - (1) * VERSIONS, result.size());
 		// Verify all from cache
 		assertEquals((FAMILIES.length -2) * COLUMNS.length * VERSIONS, cache.getFromCache());		
-		
 		// Restore row
 		restoreRow(index);
 		LOG.error("Test CheckAndDelete finished OK");

@@ -24,29 +24,20 @@ import java.util.Optional;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.client.Append;
-import org.apache.hadoop.hbase.client.CheckAndMutate;
-import org.apache.hadoop.hbase.client.CheckAndMutateResult;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Durability;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
-import org.apache.hadoop.hbase.filter.ByteArrayComparable;
-import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.hbase.wal.WALEdit;
 
 // TODO: Auto-generated Javadoc
 /**
@@ -128,73 +119,6 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
 
       rowCache.preBulkLoadHFile(ctx.getEnvironment().getRegion().getTableDescriptor(), familyPaths);
   }
-
-  /* (non-Javadoc)
-   * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#preAppend(org.apache.hadoop.hbase.coprocessor.ObserverContext, org.apache.hadoop.hbase.client.Append)
-   */
-  @Override
-  public Result preAppend(ObserverContext<RegionCoprocessorEnvironment> e,
-      Append append) throws IOException {
-
-      return rowCache.preAppend(e.getEnvironment().getRegion().getTableDescriptor(), append);
-  }
-
-  /* (non-Javadoc)
-   * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#preCheckAndDelete(org.apache.hadoop.hbase.coprocessor.ObserverContext, byte[], byte[], byte[], org.apache.hadoop.hbase.filter.CompareFilter.CompareOp, org.apache.hadoop.hbase.filter.WritableByteArrayComparable, org.apache.hadoop.hbase.client.Delete, boolean)
-   */
-//  @Override
-//  public boolean preCheckAndDelete(
-//      ObserverContext<RegionCoprocessorEnvironment> e, byte[] row,
-//      byte[] family, byte[] qualifier, CompareOperator compareOp,
-//      ByteArrayComparable comparator, Delete delete,
-//      boolean result) throws IOException {
-//      return rowCache.preCheckAndDelete(e.getEnvironment().getRegion().getTableDescriptor(), row, family, qualifier, delete, result);
-//  }
-//
-//  /* (non-Javadoc)
-//   * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#preCheckAndPut(org.apache.hadoop.hbase.coprocessor.ObserverContext, byte[], byte[], byte[], org.apache.hadoop.hbase.filter.CompareFilter.CompareOp, org.apache.hadoop.hbase.filter.WritableByteArrayComparable, org.apache.hadoop.hbase.client.Put, boolean)
-//   */
-//  @Override
-//  public boolean preCheckAndPut(
-//      ObserverContext<RegionCoprocessorEnvironment> e, byte[] row,
-//      byte[] family, byte[] qualifier, CompareOperator compareOp,
-//      ByteArrayComparable comparator, Put put, boolean result)
-//      throws IOException {
-//
-//      return rowCache.preCheckAndPut(e.getEnvironment().getRegion().getTableDescriptor(), row, family, 
-//        qualifier, put, result);
-//  }
-
-  /* (non-Javadoc)
-   * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#preDelete(org.apache.hadoop.hbase.coprocessor.ObserverContext, org.apache.hadoop.hbase.client.Delete, org.apache.hadoop.hbase.regionserver.wal.WALEdit, boolean)
-   */
-  @Override
-  public void preDelete(ObserverContext<RegionCoprocessorEnvironment> e,
-      Delete delete, WALEdit edit, Durability durability) throws IOException {
-
-      rowCache.preDelete(e.getEnvironment().getRegion().getTableDescriptor(), delete);
-  }
-
-  /* (non-Javadoc)
-   * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#preIncrement(org.apache.hadoop.hbase.coprocessor.ObserverContext, org.apache.hadoop.hbase.client.Increment)
-   */
-  @Override
-  public Result preIncrement(ObserverContext<RegionCoprocessorEnvironment> e,
-      Increment increment) throws IOException {
-
-      return rowCache.preIncrement(e.getEnvironment().getRegion().getTableDescriptor(), increment, null);
-  }
-
-
-  /* (non-Javadoc)
-   * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#prePut(org.apache.hadoop.hbase.coprocessor.ObserverContext, org.apache.hadoop.hbase.client.Put, org.apache.hadoop.hbase.regionserver.wal.WALEdit, boolean)
-   */
-  @Override
-  public void prePut(ObserverContext<RegionCoprocessorEnvironment> e,
-      Put put, WALEdit edit, Durability durability) throws IOException 
-  {
-    rowCache.prePut(e.getEnvironment().getRegion().getTableDescriptor(), put);
-  }
   
   /* (non-Javadoc)
    * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#postGet(org.apache.hadoop.hbase.coprocessor.ObserverContext, org.apache.hadoop.hbase.client.Get, java.util.List)
@@ -265,6 +189,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
   @Override
   public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
       MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+
     int num = miniBatchOp.size();
     TableDescriptor tableDesc = c.getEnvironment().getRegion().getTableDescriptor();
     for (int i = 0; i < num; i++) {
@@ -279,67 +204,6 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
         rowCache.preIncrement(tableDesc, (Increment) m, null);
       }
     }
-  }
-
-  @Override
-  public boolean postCheckAndPut(ObserverContext<RegionCoprocessorEnvironment> c, byte[] row,
-      byte[] family, byte[] qualifier, CompareOperator op, ByteArrayComparable comparator, Put put,
-      boolean result) throws IOException {
-    if (result) {
-      rowCache.postCheckAndPut(c.getEnvironment().getRegion().getTableDescriptor(), 
-        row, family, qualifier, put, result);
-    }
-    return result;
-  }
-
-  @Override
-  public boolean postCheckAndDelete(ObserverContext<RegionCoprocessorEnvironment> c, byte[] row,
-      byte[] family, byte[] qualifier, CompareOperator op, ByteArrayComparable comparator,
-      Delete delete, boolean result) throws IOException {
-    if (result) {
-      rowCache.postCheckAndDelete(c.getEnvironment().getRegion().getTableDescriptor(), 
-        row, family, qualifier, delete, result);
-    }
-    return result;  
-  }
-
-  @Override
-  public boolean postCheckAndPut(ObserverContext<RegionCoprocessorEnvironment> c, byte[] row,
-      Filter filter, Put put, boolean result) throws IOException {
-    if (result) {
-      rowCache.postCheckAndPut(c.getEnvironment().getRegion().getTableDescriptor(), 
-        row, null, null, put, result);
-    }  
-    return result;
-  }
-
-  @Override
-  public boolean postCheckAndDelete(ObserverContext<RegionCoprocessorEnvironment> c, byte[] row,
-      Filter filter, Delete delete, boolean result) throws IOException {
-    if (result) {
-      rowCache.postCheckAndDelete(c.getEnvironment().getRegion().getTableDescriptor(), 
-        row, null, null, delete, result);
-    }  
-    return result;
-  }
-
-  @Override
-  public CheckAndMutateResult postCheckAndMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      CheckAndMutate checkAndMutate, CheckAndMutateResult result) throws IOException {
-    if (result.isSuccess()) {
-      Row action = checkAndMutate.getAction();
-      
-      if (action instanceof Put) {
-        postCheckAndPut(c, null, null, (Put) action, true);
-      } else if (action instanceof Delete) {
-        postCheckAndDelete(c, null, null, (Delete) action, true);
-      } else if (action instanceof Append) {
-        preAppend(c, (Append) action);
-      } else if (action instanceof Increment) {
-        preIncrement(c, (Increment) action);
-      }
-    }
-    return result;
   }
   
   public RowCache getCache()
