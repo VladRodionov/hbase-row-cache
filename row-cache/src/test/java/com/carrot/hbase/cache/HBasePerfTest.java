@@ -14,7 +14,9 @@
  */
 package com.carrot.hbase.cache;
 
+import java.io.File;
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,7 +24,9 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NavigableSet;
+import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -59,12 +63,15 @@ import org.apache.log4j.Logger;
 import com.carrot.cache.Cache;
 import com.carrot.cache.Scavenger;
 import com.carrot.cache.controllers.AQBasedAdmissionController;
-import com.carrot.cache.io.Segment;
-import com.carrot.cache.io.SegmentScanner;
+import com.carrot.cache.controllers.MinAliveRecyclingSelector;
+import com.carrot.cache.eviction.SLRUEvictionPolicy;
 import com.carrot.cache.util.CarrotConfig;
-import com.carrot.cache.util.Utils;
 import com.carrot.hbase.cache.utils.IOUtils;
-//import com.carrot.sidecar.file.SidecarLocalFileSystem;
+import com.carrot.sidecar.SidecarCachingFileSystem;
+import com.carrot.sidecar.WriteCacheMode;
+import com.carrot.sidecar.fs.hdfs.SidecarDistributedFileSystem;
+import com.carrot.sidecar.util.SidecarCacheType;
+import com.carrot.sidecar.util.SidecarConfig;
 
 /**
  * HBase + RowCache multi-threaded performance test
@@ -111,7 +118,7 @@ public class HBasePerfTest {
   private final static Logger LOG = Logger.getLogger(PerfTest.class);
 
   /** The test time. */
-  private static long testTime = 3000000;// 3000 secs
+  private static long testTime = 1800000;// 1800 secs
 
   /** The write ratio. */
   private static float writeRatio = 0.1f; // 10% puts - 90% gets
@@ -119,62 +126,75 @@ public class HBasePerfTest {
   /** Statistics tread interval in ms */
   private static long statsInterval = 5000;
 
+  /**
+   * Row-Cache SECTION
+   */
+  
   /** File cache limit in bytes */
-  private static long fileCacheSizeLimit = 50 * (1L << 30); // 50G by default
+  private static long rcFileCacheSizeLimit = 50L * (1L << 30); // 25G by default
 
   /** File cache segment size */
-  private static long fileCacheSegmentSize = 64 * (1 << 20); // 64MB
+  private static long rcFileCacheSegmentSize = 64 * (1 << 20); // 64MB
   
   /** Cache items limit - used for all other caches. */
-  private static long fileCacheItemsLimit = 25000000; // 25 M by default
+  private static long rcFileCacheItemsLimit = 25000000; // 25 M by default
 
   /**  Enable admission controller for file cache */
-  private static boolean acForFileCache = false;
+  private static boolean rcACForFileCache = false;
   
   /** Admission controller ratio for file cache */
-  private static double acRatioForFileCache = 0.2;
+  private static double rcACRatioForFileCache = 0.2;
   
   /* Eviction policy for file cache*/
-  private static EvictionPolicy fileEvictionPolicy = EvictionPolicy.SLRU;
+  private static EvictionPolicy rcFileEvictionPolicy = EvictionPolicy.SLRU;
   
   /* Recycling selector for file cache*/
-  private static RecyclingSelector fileRecyclingSelector = RecyclingSelector.LRC;
+  private static RecyclingSelector rcFileRecyclingSelector = RecyclingSelector.MinAlive;
   
   /** Offheap cache limit in bytes */
-  private static long offheapCacheSizeLimit = 10 * (1L << 30); // 10G by default
+  private static long rcOffheapCacheSizeLimit = 10 * (1L << 30); // 10G by default
 
   /** Offheap cache segment size */
-  private static long offheapCacheSegmentSize = 4 * (1 << 20); // 4MB
+  private static long rcOffheapCacheSegmentSize = 4 * (1 << 20); // 4MB
   
   /** Offheap cache items limit - used for all other caches. */
-  private static long offheapCacheItemsLimit = 5000000; // 5 M by default
+  private static long rcOffheapCacheItemsLimit = 5000000; // 5 M by default
   
   /** Enable admission controller for offheap cache*/
-  private static boolean acForOffheapCache = false;
+  private static boolean rcACForOffheapCache = false;
   
   /** Admission controller ratio for offheap cache */
-  private static double acRatioForOffheapCache = 0.5;
+  private static double rcACRatioForOffheapCache = 0.5;
   
   /** Hybrid cache section */
   /** Victim cache */
-  private static boolean victim_promoteOnHit = true;
+  private static boolean rc_victim_promoteOnHit = true;
   
   /** Victim cache */
-  private static double victim_promoteThreshold = 0.9;
+  private static double rc_victim_promoteThreshold = 0.9;
   
   /** Main cache- when this is true, victim promote on hit must be true as well */
-  private static boolean hybridCacheInverseMode = true;
+  private static boolean rcHybridCacheInverseMode = true;
   
   /* Eviction policy for offheap cache*/
-  private static EvictionPolicy offheapEvictionPolicy = EvictionPolicy.SLRU;
+  private static EvictionPolicy rcOffheapEvictionPolicy = EvictionPolicy.SLRU;
   
   /* Recycling selector for offheap cache*/
-  private static RecyclingSelector offheapRecyclingSelector = RecyclingSelector.LRC;
+  private static RecyclingSelector rcOffheapRecyclingSelector = RecyclingSelector.MinAlive;
+  
+  /* Number of GC threads for both: offheap and file caches */
+  private static int rcScavNumberThreads = 1;
+  
+  /* Cache type */
+  private static CacheType rcCacheType = CacheType.OFFHEAP;
+
+  /** END of Row-Cache SECTION */
+  
   
   private static long cacheItemsLimit;
   
   /** Number of client threads. */
-  private static int clientThreads = 1; // by default
+  private static int clientThreads = 4; // by default
 
   /** Number of PUT operations. */
   private static AtomicLong PUTS = new AtomicLong(0);
@@ -185,41 +205,64 @@ public class HBasePerfTest {
   /** The native cache. */
   static Cache nativeCache;
 
-  /** The table a. */
+  /** The table name */
   protected static byte[] TABLE_A = "TABLE_A".getBytes();
 
   /* Families */
-  /** The families. */
   protected static byte[][] FAMILIES =
       new byte[][] { "fam_a".getBytes(), "fam_b".getBytes(), "fam_c".getBytes() };
 
   /* Columns */
-  /** The columns. */
   protected static byte[][] COLUMNS =
       { "col_a".getBytes(), "col_b".getBytes(), "col_c".getBytes() };
 
 
-  /** The cache. */
+  /** The Mr. RowCache */
   static RowCache cache;
 
-  /* All CF are cacheable */
-  /** The table a. */
+  /** The table descriptor */
   static TableDescriptor tableA;
 
   /** The max versions. */
   static int maxVersions = 10;
-
-  static int scavNumberThreads = 1;
   
   static String ssrow = "row-xxx-xxx-xxx";
   /** The s row. */
   static byte[] ROW = ssrow.getBytes();
 
   static Path dataDir;
-
-  static CacheType cacheType = CacheType.OFFHEAP;
   
   static WorkloadType workloadType = WorkloadType.ZIPFIAN;
+  
+  /* SIDECAR configuration SECTION */
+  
+  static SidecarCacheType scCacheType = SidecarCacheType.FILE;
+  
+  static long scWriteCacheMaxSize = 10L * (1 << 30);
+  
+  static long scFileCacheSize = 50L * (1L << 30);
+  
+  static int scFileDataSegmentSize = 64 * (1 << 20);
+  
+  static long scOffheapCacheSize = 10L * (1L << 30);
+  
+  static int scOffheapDataSegmentSize = 4 * (1 << 20);
+  
+  static int scPageSize = 1 << 16; // 64Kb
+  
+  static int scIOBufferSize = 2 * scPageSize;
+  
+  static boolean scACFileEnabled = false;
+  
+  static double scACStartRatio = 0.5;
+  
+  static long scMetaCacheSize = 1 << 30;
+  
+  static int scMetaCacheSegmentSize = 4 * (1 << 20);
+  
+  static int scScavThreads = 1;
+    
+  static URI scWriteCacheDirectoryURI;
   
   static ZipfDistribution dist ;
   
@@ -246,7 +289,6 @@ public class HBasePerfTest {
    * @param args the arguments
    * @throws Exception the exception
    */
-  @SuppressWarnings("deprecation")
   public final static void main(String[] args) throws Exception {
     
     parseArgs(args);
@@ -262,100 +304,53 @@ public class HBasePerfTest {
     LOG.error("Test started");
     collector.start();
     waitToFinish(threads);
-    collector.stop();
+    // TODO: stop collector gracefully
+    collector.interrupt();
+    try {
+      collector.join();
+    } catch (InterruptedException e) {
+    }
     Scavenger.waitForFinish();
     // Dump some stats
     long t2 = System.currentTimeMillis();
     LOG.error("Total time=" + (t2 - t1) + " ms");
     LOG.error("Estimated RPS=" + ((double) (PUTS.get() + GETS.get()) * 1000) / (t2 - t1));
-    
-    dumpStats();
-    
+
+    cluster.shutdown();
+    nativeCache.printStats();
+    SidecarCachingFileSystem.getDataCache().printStats();
+    SidecarCachingFileSystem.getMetaCache().printStats();
+    // TODO: shutdown minicluster
     IOUtils.deleteRecursively(dataDir.toFile());
+    IOUtils.deleteRecursively(new File(scWriteCacheDirectoryURI.getPath()));
   }
   
   private static void printTestParameters() {
     LOG.error("Test parameters:"
     + "\n            Workload=" + workloadType 
-    + "\n               Cache=" + cacheType 
+    + "\n               Cache=" + rcCacheType 
     + "\n          Cache size=" + nativeCache.getMaximumCacheSize()
     + "\n   Cache items limit=" + cacheItemsLimit 
     + "\n      Client threads=" + clientThreads
-    + "\n   Scavenger threads=" + scavNumberThreads 
-    + "\n  Offheap cache size=" + offheapCacheSizeLimit 
-    + "\n     File cache size=" + fileCacheSizeLimit
-    + "\nOffheap segment size=" + offheapCacheSegmentSize 
-    + "\n   File segment size=" + fileCacheSegmentSize
+    + "\n   Scavenger threads=" + rcScavNumberThreads 
+    + "\n  Offheap cache size=" + rcOffheapCacheSizeLimit 
+    + "\n     File cache size=" + rcFileCacheSizeLimit
+    + "\nOffheap segment size=" + rcOffheapCacheSegmentSize 
+    + "\n   File segment size=" + rcFileCacheSegmentSize
     + "\n       Test duration=" + testTime / 1000 
-    + "\n    Offheap eviction=" + offheapEvictionPolicy
-    + "\n       File eviction=" + fileEvictionPolicy 
-    + "\n    Offheap recycler=" + offheapRecyclingSelector
-    + "\n       File recycler=" + fileRecyclingSelector
-    + "\n         AC for File=" + acForFileCache
-    + "\n       AC File ratio=" + acRatioForFileCache
-    + "\n      AC for Offheap=" + acForOffheapCache
-    + "\n    AC Offheap ratio=" + acRatioForOffheapCache
-    + "\n  Victim promote hit=" + victim_promoteOnHit
-    + "\n      Victim thrshld=" + victim_promoteThreshold 
-    + "\n Hybrid inverse mode=" + hybridCacheInverseMode);
+    + "\n    Offheap eviction=" + rcOffheapEvictionPolicy
+    + "\n       File eviction=" + rcFileEvictionPolicy 
+    + "\n    Offheap recycler=" + rcOffheapRecyclingSelector
+    + "\n       File recycler=" + rcFileRecyclingSelector
+    + "\n         AC for File=" + rcACForFileCache
+    + "\n       AC File ratio=" + rcACRatioForFileCache
+    + "\n      AC for Offheap=" + rcACForOffheapCache
+    + "\n    AC Offheap ratio=" + rcACRatioForOffheapCache
+    + "\n  Victim promote hit=" + rc_victim_promoteOnHit
+    + "\n      Victim thrshld=" + rc_victim_promoteThreshold 
+    + "\n Hybrid inverse mode=" + rcHybridCacheInverseMode);
   }
   
-  private static void dumpStats() throws IOException {
-    Segment[] segments = nativeCache.getSegmentsSorted();
-    for (Segment seg: segments) {
-      if (seg == null) {
-        LOG.error("null");
-        continue;
-      }
-      if (seg.isSealed() == false) {
-        LOG.error("Segment id=" + seg.getId() + " is not sealed, offheap=" + seg.isOffheap());
-        seg.seal();
-      }
-      if (seg.isRecycling()) {
-        LOG.error("Segment id=" + seg.getId() + " is recycling");
-      }
-      dumpSegments(seg);
-    }
-  }
-
-  private static void dumpSegments(Segment seg) throws IOException {
-    
-    if (nativeCache.getCacheType() == Cache.Type.DISK && seg.isOffheap()) {
-      return;
-    }
-    SegmentScanner sc = nativeCache.getSegmentScanner(seg);
-
-    int total = seg.getTotalItems();
-    int alive = seg.getAliveItems();
-    int maxId = Integer.MIN_VALUE;
-    int minId = Integer.MAX_VALUE;
-    boolean isDirect = sc.isDirect();
-    byte[] buffer = !isDirect? new byte[4096]: null;
-    while (sc.hasNext()) {
-      long keyPtr = sc.keyAddress();
-      int keySize = sc.keyLength();
-      String key = null;
-      if (!isDirect) {
-        keySize = sc.getKey(buffer, 0);
-        key = new String(buffer, 0, keySize);
-      } else {
-        key = new String(Utils.toBytes(keyPtr, keySize));
-      }
-      key = key.substring(21, 31);
-      int id = Integer.parseInt(key);
-      if (id > maxId) {
-        maxId = id;
-      } else if (id < minId) {
-        minId = id;
-      }
-      sc.next();
-    }
-    
-    LOG.error("Segment id=" + seg.getId() + " creation time=" + seg.getInfo().getCreationTime() + 
-      " total=" + total + " active =" + alive + " minId=" + minId + " maxId=" + maxId + " datsSize=" 
-        + seg.getSegmentDataSize());
-
-  }
 
   /**
    * Initializes the cache.
@@ -369,7 +364,13 @@ public class HBasePerfTest {
         + (Runtime.getRuntime().maxMemory() - Runtime.getRuntime().freeMemory()));
     
     Configuration conf = UTIL.getConfiguration();
-    conf.set(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY, CP_CLASS_NAME);
+    String coprocessors = conf.get(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY);
+    if (coprocessors != null && coprocessors.length() > 1) {
+      coprocessors += "," + CP_CLASS_NAME;
+    } else {
+      coprocessors = CP_CLASS_NAME;
+    }
+    conf.set(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY, coprocessors);
     conf.set("hbase.zookeeper.useMulti", "false");
     
     // Cache configuration
@@ -379,18 +380,18 @@ public class HBasePerfTest {
     
     conf.set(CarrotConfig.CACHE_ROOT_DIR_PATH_KEY, dataDir.toString());
     
-    switch (cacheType) {
+    switch (rcCacheType) {
       case OFFHEAP:
         // Set cache type to 'offheap'
         conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.OFFHEAP.getType());
         initOffheapConfiguration(conf);
-        cacheItemsLimit = offheapCacheItemsLimit;
+        cacheItemsLimit = rcOffheapCacheItemsLimit;
         break;
       case FILE:
         // Set cache type to 'file'
         conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.FILE.getType());
         initFileConfiguration(conf);
-        cacheItemsLimit = fileCacheItemsLimit;
+        cacheItemsLimit = rcFileCacheItemsLimit;
         break;
       case HYBRID:
         // Set cache type to 'hybrid'
@@ -398,16 +399,15 @@ public class HBasePerfTest {
         initOffheapConfiguration(conf);
         initFileConfiguration(conf);
         
-        cacheItemsLimit = offheapCacheItemsLimit + fileCacheItemsLimit;
+        cacheItemsLimit = rcOffheapCacheItemsLimit + rcFileCacheItemsLimit;
         break;
     }
     
     initForZipfianAndHybridConfiguration(conf);
-    //conf.set("fs.file.impl", SidecarLocalFileSystem.class.getName());
+    configureSidecar(conf);
     // Enable snapshot
     UTIL.startMiniCluster(1);
     cluster = UTIL.getMiniHBaseCluster();
-
     createTables();
     createHBaseTables();
     
@@ -421,10 +421,109 @@ public class HBasePerfTest {
         e.printStackTrace();
       }
     }
-    
     cache = RowCache.instance;
-    //cache.setTrace(true);
     nativeCache = cache.getCache();
+  }
+  
+  private static void configureSidecar (Configuration conf) throws IOException {
+    
+    scWriteCacheDirectoryURI = Files.createTempDirectory("write").toUri();
+    
+    conf.set("fs.hdfs.impl", SidecarDistributedFileSystem.class.getName());
+    // Do not use cached instance - default
+    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+
+    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_MODE_KEY, WriteCacheMode.ASYNC.getMode());
+    conf.setLong(SidecarConfig.SIDECAR_WRITE_CACHE_SIZE_KEY, scWriteCacheMaxSize);
+    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_URI_KEY, scWriteCacheDirectoryURI.toString());
+    conf.setBoolean(SidecarConfig.SIDECAR_TEST_MODE_KEY, true);
+    conf.setBoolean(SidecarConfig.SIDECAR_JMX_METRICS_ENABLED_KEY, true);
+    conf.setBoolean(SidecarConfig.SIDECAR_INSTALL_SHUTDOWN_HOOK_KEY, true);
+    // Set global cache directory
+    // Files are immutable after creation
+    conf.setBoolean(SidecarConfig.SIDECAR_REMOTE_FILES_MUTABLE_KEY, true);
+    
+    CarrotConfig carrotCacheConfig = CarrotConfig.getInstance();
+    // Set meta cache 
+    carrotCacheConfig.setCacheMaximumSize(SidecarConfig.META_CACHE_NAME, scMetaCacheSize);
+    carrotCacheConfig.setCacheSegmentSize(SidecarConfig.META_CACHE_NAME, scMetaCacheSegmentSize);
+    switch(scCacheType) {
+      case  OFFHEAP: 
+        conf = updateConfigurationOffheap(conf); break;
+      case FILE: 
+        conf = updateConfigurationFile(conf); break;
+      default:
+    }
+  }
+  
+  private static Configuration updateConfigurationFile(Configuration conf) {
+    SidecarConfig cacheConfig = SidecarConfig.getInstance();
+    cacheConfig
+      .setDataPageSize(scPageSize)
+      .setIOBufferSize(scIOBufferSize)
+      .setDataCacheType(SidecarCacheType.FILE)
+      .setJMXMetricsEnabled(true);
+    
+    CarrotConfig carrotCacheConfig = CarrotConfig.getInstance();
+    
+    carrotCacheConfig.setCacheMaximumSize(SidecarConfig.DATA_CACHE_FILE_NAME, scFileCacheSize);
+    carrotCacheConfig.setCacheSegmentSize(SidecarConfig.DATA_CACHE_FILE_NAME, scFileDataSegmentSize);
+    carrotCacheConfig.setCacheEvictionPolicy(SidecarConfig.DATA_CACHE_FILE_NAME, SLRUEvictionPolicy.class.getName());
+    carrotCacheConfig.setRecyclingSelector(SidecarConfig.DATA_CACHE_FILE_NAME, MinAliveRecyclingSelector.class.getName());
+    carrotCacheConfig.setSLRUInsertionPoint(SidecarConfig.DATA_CACHE_FILE_NAME, 6);
+    if (scACFileEnabled) {
+      carrotCacheConfig.setAdmissionController(SidecarConfig.DATA_CACHE_FILE_NAME, AQBasedAdmissionController.class.getName());
+      carrotCacheConfig.setAdmissionQueueStartSizeRatio(SidecarConfig.DATA_CACHE_FILE_NAME, scACStartRatio);
+    }
+    
+    if (scScavThreads > 1) {
+      carrotCacheConfig.setScavengerNumberOfThreads(SidecarConfig.DATA_CACHE_FILE_NAME, scScavThreads);      
+    }
+    
+    //carrotCacheConfig.setVictimCachePromotionOnHit(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteOnHit);
+    //carrotCacheConfig.setVictimPromotionThreshold(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteThreshold);
+    
+    return getHdfsConfiguration(conf, cacheConfig, carrotCacheConfig);
+  }
+
+  private static Configuration updateConfigurationOffheap(Configuration conf) {
+    SidecarConfig cacheConfig = SidecarConfig.getInstance();
+    cacheConfig
+      .setDataPageSize(scPageSize)
+      .setIOBufferSize(scIOBufferSize)
+      .setDataCacheType(SidecarCacheType.OFFHEAP)
+      .setJMXMetricsEnabled(true);
+    
+    CarrotConfig carrotCacheConfig = CarrotConfig.getInstance();
+    
+    carrotCacheConfig.setCacheMaximumSize(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, scOffheapCacheSize);
+    carrotCacheConfig.setCacheSegmentSize(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, scOffheapDataSegmentSize);
+    carrotCacheConfig.setCacheEvictionPolicy(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, SLRUEvictionPolicy.class.getName());
+    carrotCacheConfig.setRecyclingSelector(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, MinAliveRecyclingSelector.class.getName());
+    carrotCacheConfig.setSLRUInsertionPoint(SidecarConfig.DATA_CACHE_FILE_NAME, 6);
+    
+    if (scScavThreads > 1) {
+      carrotCacheConfig.setScavengerNumberOfThreads(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, scScavThreads);      
+    }
+    
+    //carrotCacheConfig.setVictimCachePromotionOnHit(SidecarConfig.DATA_CACHE_FILE_NAME, victim_promoteOnHit);
+    //carrotCacheConfig.setVictimPromotionThreshold(SidecarConfig.DATA_CACHE_FILE_NAME, victim_promoteThreshold);
+    
+    return getHdfsConfiguration(conf, cacheConfig, carrotCacheConfig);
+  }
+
+  
+  public static Configuration getHdfsConfiguration(Configuration configuration, 
+      SidecarConfig sidecarConfig, CarrotConfig carrotCacheConfig)
+  {
+      for(Entry<Object, Object> e: sidecarConfig.entrySet()) {
+        configuration.set((String) e.getKey(), (String) e.getValue());
+      }
+      Properties p = carrotCacheConfig.getProperties();
+      for(Entry<Object, Object> e: p.entrySet()) {
+        configuration.set((String) e.getKey(), (String) e.getValue());
+      }
+      return configuration;
   }
   
   protected static void createHBaseTables() throws IOException {    
@@ -445,15 +544,15 @@ public class HBasePerfTest {
       cacheItemsLimit = 2 * cacheItemsLimit;
       dist = new ZipfDistribution((int) cacheItemsLimit, workloadType.getZipfAlpha());
     }
-    if (cacheType == CacheType.HYBRID) {
+    if (rcCacheType == CacheType.HYBRID) {
       // For uniform distribution we do nothing
       // for zipfian we have several options: use Admission controllers, use cache inverse mode
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_VICTIM_PROMOTION_ON_HIT_KEY),
-        Boolean.toString(victim_promoteOnHit));
+        Boolean.toString(rc_victim_promoteOnHit));
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_VICTIM_PROMOTION_THRESHOLD_KEY),
-        Double.toString(victim_promoteThreshold));
+        Double.toString(rc_victim_promoteThreshold));
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.CACHE_HYBRID_INVERSE_MODE_KEY),
-        Boolean.toString(hybridCacheInverseMode));
+        Boolean.toString(rcHybridCacheInverseMode));
     }
   }
   
@@ -466,13 +565,13 @@ public class HBasePerfTest {
       evictionPolicy = EvictionPolicy.FIFO;
       recyclingSelector = RecyclingSelector.LRC;
     } else {
-      evictionPolicy = fileEvictionPolicy;
-      recyclingSelector = fileRecyclingSelector;
+      evictionPolicy = rcFileEvictionPolicy;
+      recyclingSelector = rcFileRecyclingSelector;
     }
     
     // set cache size to 1GB
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_MAXIMUM_SIZE_KEY),
-      Long.toString(fileCacheSizeLimit));
+      Long.toString(rcFileCacheSizeLimit));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_EVICTION_POLICY_IMPL_KEY),
       evictionPolicy.getClassName());
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_RECYCLING_SELECTOR_IMPL_KEY),
@@ -482,16 +581,16 @@ public class HBasePerfTest {
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_STOP_RUN_RATIO_KEY), 
       Double.toString(0.95));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_NUMBER_THREADS_KEY),
-      Integer.toString(scavNumberThreads));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_START_KEY), 
+      Integer.toString(rcScavNumberThreads));
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
       Double.toString(1.0));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_SEGMENT_SIZE_KEY), 
-      Long.toString(fileCacheSegmentSize));
-    if (acForFileCache && workloadType == WorkloadType.ZIPFIAN) {
+      Long.toString(rcFileCacheSegmentSize));
+    if (rcACForFileCache && workloadType == WorkloadType.ZIPFIAN) {
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_ADMISSION_CONTROLLER_IMPL_KEY),
         AQBasedAdmissionController.class.getName());
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.ADMISSION_QUEUE_START_SIZE_RATIO_KEY),
-        Double.toString(acRatioForFileCache));
+        Double.toString(rcACRatioForFileCache));
     }
   }
   
@@ -504,12 +603,12 @@ public class HBasePerfTest {
       evictionPolicy = EvictionPolicy.FIFO;
       recyclingSelector = RecyclingSelector.LRC;
     } else {
-      evictionPolicy = offheapEvictionPolicy;
-      recyclingSelector = offheapRecyclingSelector;
+      evictionPolicy = rcOffheapEvictionPolicy;
+      recyclingSelector = rcOffheapRecyclingSelector;
     }
     
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.CACHE_MAXIMUM_SIZE_KEY),
-      Long.toString(offheapCacheSizeLimit));
+      Long.toString(rcOffheapCacheSizeLimit));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.CACHE_EVICTION_POLICY_IMPL_KEY),
       evictionPolicy.getClassName());
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.CACHE_RECYCLING_SELECTOR_IMPL_KEY),
@@ -519,16 +618,16 @@ public class HBasePerfTest {
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_STOP_RUN_RATIO_KEY), 
       Double.toString(0.95));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_NUMBER_THREADS_KEY),
-      Integer.toString(scavNumberThreads));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_START_KEY), 
+      Integer.toString(rcScavNumberThreads));
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
       Double.toString(1.0));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.CACHE_SEGMENT_SIZE_KEY), 
-      Long.toString(offheapCacheSegmentSize));
-    if (acForOffheapCache && workloadType == WorkloadType.ZIPFIAN) {
+      Long.toString(rcOffheapCacheSegmentSize));
+    if (rcACForOffheapCache && workloadType == WorkloadType.ZIPFIAN) {
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.CACHE_ADMISSION_CONTROLLER_IMPL_KEY),
         AQBasedAdmissionController.class.getName());
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.ADMISSION_QUEUE_START_SIZE_RATIO_KEY),
-        Double.toString(acRatioForOffheapCache));
+        Double.toString(rcACRatioForOffheapCache));
     }
   }
   
@@ -547,7 +646,7 @@ public class HBasePerfTest {
       } else if (args[i].equals(DURATION)) {
         testTime = Long.parseLong(args[++i]) * 1000;
       } else if (args[i].equals(MAXMEMORY)) {
-        fileCacheSizeLimit = Long.parseLong(args[++i]);
+        rcFileCacheSizeLimit = Long.parseLong(args[++i]);
       }
       i++;
     }
@@ -813,6 +912,7 @@ public class HBasePerfTest {
       try {
         testPerf(getName());
       } catch (Exception e) {
+        e.printStackTrace();
         LOG.error(e);
       }
     }
@@ -907,6 +1007,7 @@ public class HBasePerfTest {
           byte[] row = getRow(l);
           @SuppressWarnings("unused")
           List<Cell> results = getFromCache(row, map);
+          GETS.incrementAndGet();
         } catch (Exception e) {
           LOG.error("get native call.", e);
           System.exit(-1);
@@ -915,6 +1016,7 @@ public class HBasePerfTest {
         try {
           long nextSeqNumber = seqNumber.incrementAndGet();
           cacheRow(nextSeqNumber);
+          PUTS.incrementAndGet();
         } catch (Exception e) {
           e.printStackTrace();
           LOG.error("put call.", e);
@@ -978,7 +1080,6 @@ public class HBasePerfTest {
      */
     public StatsCollector(long interval, ExecuteThread[] sources) {
       super("StatsCollector");
-      setDaemon(true);
       this.mThreads = sources;
       this.mInterval = interval;
       this.mStartTime = System.currentTimeMillis();
@@ -986,18 +1087,21 @@ public class HBasePerfTest {
 
     public void run() {
       
-      if (cacheType == CacheType.HYBRID) {
+      if (rcCacheType == CacheType.HYBRID) {
         Scavenger.Stats stats1 = Scavenger.getStatisticsForCache(CacheType.OFFHEAP.getCacheName());
         Scavenger.Stats stats2 = Scavenger.getStatisticsForCache(CacheType.FILE.getCacheName());
 
       } else {
-        Scavenger.Stats stats = Scavenger.getStatisticsForCache(cacheType.getCacheName());
+        Scavenger.Stats stats = Scavenger.getStatisticsForCache(rcCacheType.getCacheName());
       }
       while (true) {
+        if (Thread.interrupted()) {
+          return;
+        }
         try {
           Thread.sleep(mInterval);
-        } catch (Exception e) {
-
+        } catch (InterruptedException e) {
+          return;
         }
         double rps = 0.d;
         double max = 0.d;
@@ -1041,11 +1145,6 @@ public class HBasePerfTest {
             + "\n      USED SIZE=" + getRawSize()
             + "\n   TOTAL WRITES=" + getTotalWrites()
             + "\nREJECTED WRITES=" + getTotalRejectedWrites());
-//            + "\n   SCAV SCANNED=" + stats.getTotalItemsScanned()
-//            + "\n     SCAV FREED=" + stats.getTotalItemsFreed() 
-//            + "\n   SCAV DELETED=" + stats.getTotalItemsDeleted()
-//            + "\n   SCAV EXPIRED=" + stats.getTotalItemsExpired() 
-//            + "\n SCAV NOT FOUND=" + stats.getTotalItemsNotFound());
         Scavenger.printStats();
             
       }

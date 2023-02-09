@@ -36,6 +36,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.filter.Filter;
@@ -439,6 +440,18 @@ public class BaseTest {
       }
 		}
 		return del;
+	}
+	
+	/**
+	 *  Creates simple scan 
+	 * @param startRow
+	 * @param stopRow
+	 * @return scan
+	 */
+	protected Scan createSimpleScan (byte[] startRow, byte[] stopRow) {
+	  Scan scan = new Scan().withStartRow(startRow).withStopRow(stopRow);
+	  scan.addFamily(FAMILIES[0]);
+	  return scan;
 	}
 	
 	/**

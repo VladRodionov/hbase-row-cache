@@ -181,7 +181,7 @@ public class CoprocessorBaseTest extends BaseTest {
 		}
 	  LOG.error ("Put all " + n +" rows  starts.");
 		long start = System.currentTimeMillis();
-		for(int i=0; i < n; i++){
+		for(int i = 0; i < n; i++){
 			Put put = createPut(data.get(i));
 			table.put(put);
 		}

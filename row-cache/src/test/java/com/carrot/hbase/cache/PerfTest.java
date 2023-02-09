@@ -430,7 +430,7 @@ public class PerfTest {
       Double.toString(0.95));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_NUMBER_THREADS_KEY),
       Integer.toString(scavNumberThreads));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_START_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
       Double.toString(1.0));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CarrotConfig.CACHE_SEGMENT_SIZE_KEY), 
       Long.toString(fileCacheSegmentSize));
@@ -467,7 +467,7 @@ public class PerfTest {
       Double.toString(0.95));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_NUMBER_THREADS_KEY),
       Integer.toString(scavNumberThreads));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_START_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CarrotConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
       Double.toString(1.0));
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CarrotConfig.CACHE_SEGMENT_SIZE_KEY), 
       Long.toString(offheapCacheSegmentSize));

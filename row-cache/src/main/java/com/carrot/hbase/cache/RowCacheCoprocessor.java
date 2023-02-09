@@ -31,12 +31,16 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
+import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
+import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
 
 // TODO: Auto-generated Javadoc
@@ -120,6 +124,32 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
       rowCache.preBulkLoadHFile(ctx.getEnvironment().getRegion().getTableDescriptor(), familyPaths);
   }
   
+  @Override
+  public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
+      throws IOException {
+    // Check consistency, if strong - do not cache or return result from cache
+    // Check Scan ID if not Set - set it org.apache.hadoop.hbase.client.Scan#ID_ATRIBUTE
+    // Create a Key from a Scan object
+    // 
+  }
+
+  @Override
+  public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
+      RegionScanner s) throws IOException {
+    // Now we can return subclass which can work with cached data
+    //LOG.info("postScannerOpen s=" + s);
+    return s;
+  }
+
+  @Override
+  public boolean preScannerNext(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s,
+      List<Result> result, int limit, boolean hasNext) throws IOException {
+    // RegionScannerImpl
+    // we can use org.apache.hadoop.hbase.client.Scan#ID_ATRIBUTE
+    //LOG.info("preScannerNext s=" + s);
+    return hasNext;
+  }
+ 
   /* (non-Javadoc)
    * @see org.apache.hadoop.hbase.coprocessor.RegionObserver#postGet(org.apache.hadoop.hbase.coprocessor.ObserverContext, org.apache.hadoop.hbase.client.Get, java.util.List)
    */
