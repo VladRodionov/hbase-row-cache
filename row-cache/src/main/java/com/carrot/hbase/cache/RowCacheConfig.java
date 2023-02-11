@@ -17,6 +17,8 @@
  */
 package com.carrot.hbase.cache;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
@@ -50,7 +52,7 @@ public class RowCacheConfig extends Properties {
         
   public final static String DEFAULT_ROWCACHE_JMX_METRICS_ENABLED = "true";
   
-  public final static String DEFAULT_ROWCACHE_JMX_METRICS_DOMAIN_NAME = "com.carrot.rowcache";
+  public final static String DEFAULT_ROWCACHE_JMX_METRICS_DOMAIN_NAME = "HBase-ScanCache";
   
   public final static String DEFAULT_ROWCACHE_PERSISTENT = "true";
   
@@ -139,7 +141,13 @@ public class RowCacheConfig extends Properties {
    * @return jmx domain name
    */
   public String getJMXDomainName() {
-    return getProperty(ROWCACHE_JMX_METRICS_DOMAIN_NAME_KEY, DEFAULT_ROWCACHE_JMX_METRICS_DOMAIN_NAME);
+    String v = getProperty(ROWCACHE_JMX_METRICS_DOMAIN_NAME_KEY, 
+      DEFAULT_ROWCACHE_JMX_METRICS_DOMAIN_NAME);
+    try {
+      v += "-" + InetAddress.getLocalHost().getHostAddress();
+    } catch (UnknownHostException e) {
+    }
+    return v;
   }
   
   /**

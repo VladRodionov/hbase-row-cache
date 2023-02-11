@@ -238,7 +238,7 @@ public class HBasePerfTest {
   
   static SidecarCacheType scCacheType = SidecarCacheType.FILE;
   
-  static long scWriteCacheMaxSize = 10L * (1 << 30);
+  static long scWriteCacheMaxSize = 2L * (1 << 30);
   
   static long scFileCacheSize = 50L * (1L << 30);
   
