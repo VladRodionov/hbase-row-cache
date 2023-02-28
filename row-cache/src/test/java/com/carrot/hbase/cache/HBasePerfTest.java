@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.StartMiniClusterOption;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
@@ -66,12 +67,15 @@ import com.carrot.cache.controllers.AQBasedAdmissionController;
 import com.carrot.cache.controllers.MinAliveRecyclingSelector;
 import com.carrot.cache.eviction.SLRUEvictionPolicy;
 import com.carrot.cache.util.CarrotConfig;
+import com.carrot.cache.util.Utils;
 import com.carrot.hbase.cache.utils.IOUtils;
 import com.carrot.sidecar.SidecarCachingFileSystem;
 import com.carrot.sidecar.WriteCacheMode;
 import com.carrot.sidecar.fs.hdfs.SidecarDistributedFileSystem;
-import com.carrot.sidecar.util.SidecarCacheType;
-import com.carrot.sidecar.util.SidecarConfig;
+import com.carrot.sidecar.hints.HBaseScanDetectorHint;
+import com.carrot.sidecar.DataCacheMode;
+import com.carrot.sidecar.SidecarConfig;
+import com.carrot.sidecar.SidecarDataCacheType;
 
 /**
  * HBase + RowCache multi-threaded performance test
@@ -118,10 +122,10 @@ public class HBasePerfTest {
   private final static Logger LOG = Logger.getLogger(PerfTest.class);
 
   /** The test time. */
-  private static long testTime = 1800000;// 1800 secs
+  private static long testTime = 3600000;// 1 hour
 
   /** The write ratio. */
-  private static float writeRatio = 0.1f; // 10% puts - 90% gets
+  private static float writeRatio = 0.05f; // 10% puts - 90% gets
 
   /** Statistics tread interval in ms */
   private static long statsInterval = 5000;
@@ -190,7 +194,6 @@ public class HBasePerfTest {
 
   /** END of Row-Cache SECTION */
   
-  
   private static long cacheItemsLimit;
   
   /** Number of client threads. */
@@ -220,11 +223,16 @@ public class HBasePerfTest {
   /** The Mr. RowCache */
   static RowCache cache;
 
+  /* Use row cache */
+  static boolean useRowCache = true;
+  
   /** The table descriptor */
   static TableDescriptor tableA;
 
+  static int blockSize = 64 * 1024;
+  
   /** The max versions. */
-  static int maxVersions = 10;
+  static int maxVersions = 20;
   
   static String ssrow = "row-xxx-xxx-xxx";
   /** The s row. */
@@ -236,11 +244,11 @@ public class HBasePerfTest {
   
   /* SIDECAR configuration SECTION */
   
-  static SidecarCacheType scCacheType = SidecarCacheType.FILE;
+  static SidecarDataCacheType scCacheType = SidecarDataCacheType.DISABLED;
   
-  static long scWriteCacheMaxSize = 2L * (1 << 30);
+  static long scWriteCacheMaxSize = 10L * (1 << 30);
   
-  static long scFileCacheSize = 50L * (1L << 30);
+  static long scFileCacheSize = 10L * (1L << 30);
   
   static int scFileDataSegmentSize = 64 * (1 << 20);
   
@@ -248,13 +256,13 @@ public class HBasePerfTest {
   
   static int scOffheapDataSegmentSize = 4 * (1 << 20);
   
-  static int scPageSize = 1 << 16; // 64Kb
+  static int scPageSize = 1 << 16; // 4Kb
   
   static int scIOBufferSize = 2 * scPageSize;
   
   static boolean scACFileEnabled = false;
   
-  static double scACStartRatio = 0.5;
+  static double scACStartRatio = 0.2;
   
   static long scMetaCacheSize = 1 << 30;
   
@@ -266,6 +274,8 @@ public class HBasePerfTest {
   
   static ZipfDistribution dist ;
   
+  static long toLoad = 2000000;// 2M KV
+  
   /** The util. */
   private static HBaseTestingUtility UTIL = new HBaseTestingUtility();  
   
@@ -275,6 +285,8 @@ public class HBasePerfTest {
   /** The cluster. */
   static MiniHBaseCluster cluster;
   
+  static Path testDirPath;
+  
   /** The _table c. */
   static HTable _tableA;
   
@@ -283,26 +295,33 @@ public class HBasePerfTest {
   
   /* HBase Admin interface*/
   static Admin admin;
+  
+  static boolean hbaseBlockCacheEnabled = true;
+  
+  static enum TestType{
+    LOAD_AND_READ,
+    LOAD_THEN_READ
+  }
 
+  static TestType testType = TestType.LOAD_AND_READ;
+  
   /**
    * The main method.
    * @param args the arguments
    * @throws Exception the exception
    */
   public final static void main(String[] args) throws Exception {
-    
+
     parseArgs(args);
     init();
     printTestParameters();
-    String[] keyPrefix = new String[clientThreads];
-    for (int i = 0; i < clientThreads; i++) {
-      keyPrefix[i] = "Thread[" + i + "]";
-    }
+
     long t1 = System.currentTimeMillis();
-    ExecuteThread[] threads = startTest(keyPrefix, clientThreads);
+    ExecuteThread[] threads = startTest(false);
     StatsCollector collector = new StatsCollector(statsInterval, threads);
     LOG.error("Test started");
     collector.start();
+    // Phase 1: load data
     waitToFinish(threads);
     // TODO: stop collector gracefully
     collector.interrupt();
@@ -310,6 +329,28 @@ public class HBasePerfTest {
       collector.join();
     } catch (InterruptedException e) {
     }
+    if (testType == TestType.LOAD_THEN_READ) {
+      // Compact all
+      LOG.error("Major compaction started ");
+      long start = System.currentTimeMillis();
+      UTIL.getMiniHBaseCluster().flushcache();
+      UTIL.compact(true);
+      LOG.error(
+        "Major compaction finished in " + (System.currentTimeMillis() - start) / 1000 + " sec");
+      // PHASE 2: read
+      threads = startTest(true);
+      collector = new StatsCollector(statsInterval, threads);
+      LOG.error("Phase READ started");
+      collector.start();
+      waitToFinish(threads);
+      // TODO: stop collector gracefully
+      collector.interrupt();
+      try {
+        collector.join();
+      } catch (InterruptedException e) {
+      }
+    }
+
     Scavenger.waitForFinish();
     // Dump some stats
     long t2 = System.currentTimeMillis();
@@ -317,19 +358,20 @@ public class HBasePerfTest {
     LOG.error("Estimated RPS=" + ((double) (PUTS.get() + GETS.get()) * 1000) / (t2 - t1));
 
     cluster.shutdown();
-    nativeCache.printStats();
+    if (nativeCache != null) {
+      nativeCache.printStats();
+    }
     SidecarCachingFileSystem.getDataCache().printStats();
     SidecarCachingFileSystem.getMetaCache().printStats();
-    // TODO: shutdown minicluster
     IOUtils.deleteRecursively(dataDir.toFile());
     IOUtils.deleteRecursively(new File(scWriteCacheDirectoryURI.getPath()));
   }
-  
+
   private static void printTestParameters() {
     LOG.error("Test parameters:"
     + "\n            Workload=" + workloadType 
     + "\n               Cache=" + rcCacheType 
-    + "\n          Cache size=" + nativeCache.getMaximumCacheSize()
+    + "\n          Cache size=" + (nativeCache != null?nativeCache.getMaximumCacheSize(): 0)
     + "\n   Cache items limit=" + cacheItemsLimit 
     + "\n      Client threads=" + clientThreads
     + "\n   Scavenger threads=" + rcScavNumberThreads 
@@ -357,21 +399,35 @@ public class HBasePerfTest {
    * @throws Exception 
    */
   private static void init() throws Exception {
-
+    blockSize = 4096;
+    scPageSize = 4096;
+    scIOBufferSize = 256 * scPageSize; // 1MB
+    useRowCache = false;
+    hbaseBlockCacheEnabled = false;
+    
     long start = System.currentTimeMillis();
     LOG.error("Generating " + M + " rows took: " + (System.currentTimeMillis() - start) + " ms");
     LOG.error("Allocated JVM heap: "
         + (Runtime.getRuntime().maxMemory() - Runtime.getRuntime().freeMemory()));
     
     Configuration conf = UTIL.getConfiguration();
-    String coprocessors = conf.get(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY);
-    if (coprocessors != null && coprocessors.length() > 1) {
-      coprocessors += "," + CP_CLASS_NAME;
-    } else {
-      coprocessors = CP_CLASS_NAME;
+    if (useRowCache) {
+      String coprocessors = conf.get(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY);
+      if (coprocessors != null && coprocessors.length() > 1) {
+        coprocessors += "," + CP_CLASS_NAME;
+      } else {
+        coprocessors = CP_CLASS_NAME;
+      }
+      conf.set(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY, coprocessors);
     }
-    conf.set(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY, coprocessors);
     conf.set("hbase.zookeeper.useMulti", "false");
+    
+    conf.setInt("hbase.hstore.flusher.count", 4);
+    conf.setInt("hbase.hstore.blockingStoreFiles", 100);
+    conf.setInt("hbase.hregion.memstore.flush.size", 256 * (1 << 20));
+    conf.set("hbase.regionserver.global.memstore.size", "0.5");
+    conf.set("hfile.block.cache.size", "0.2");
+    //conf.set("hbase.wal.provider", "filesystem");
     
     // Cache configuration
     dataDir = Files.createTempDirectory("temp");
@@ -380,38 +436,47 @@ public class HBasePerfTest {
     
     conf.set(CarrotConfig.CACHE_ROOT_DIR_PATH_KEY, dataDir.toString());
     
-    switch (rcCacheType) {
-      case OFFHEAP:
-        // Set cache type to 'offheap'
-        conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.OFFHEAP.getType());
-        initOffheapConfiguration(conf);
-        cacheItemsLimit = rcOffheapCacheItemsLimit;
-        break;
-      case FILE:
-        // Set cache type to 'file'
-        conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.FILE.getType());
-        initFileConfiguration(conf);
-        cacheItemsLimit = rcFileCacheItemsLimit;
-        break;
-      case HYBRID:
-        // Set cache type to 'hybrid'
-        conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.HYBRID.getType());
-        initOffheapConfiguration(conf);
-        initFileConfiguration(conf);
-        
-        cacheItemsLimit = rcOffheapCacheItemsLimit + rcFileCacheItemsLimit;
-        break;
+    if (useRowCache) {
+      switch (rcCacheType) {
+        case OFFHEAP:
+          // Set cache type to 'offheap'
+          conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.OFFHEAP.getType());
+          initOffheapConfiguration(conf);
+          cacheItemsLimit = rcOffheapCacheItemsLimit;
+          break;
+        case FILE:
+          // Set cache type to 'file'
+          conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.FILE.getType());
+          initFileConfiguration(conf);
+          cacheItemsLimit = rcFileCacheItemsLimit;
+          break;
+        case HYBRID:
+          // Set cache type to 'hybrid'
+          conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.HYBRID.getType());
+          initOffheapConfiguration(conf);
+          initFileConfiguration(conf);
+
+          cacheItemsLimit = rcOffheapCacheItemsLimit + rcFileCacheItemsLimit;
+          break;
+      }
+    } else {
+      cacheItemsLimit = rcFileCacheItemsLimit;
     }
     
     initForZipfianAndHybridConfiguration(conf);
     configureSidecar(conf);
-    // Enable snapshot
-    UTIL.startMiniCluster(1);
+    StartMiniClusterOption option = StartMiniClusterOption.builder()
+        .numRegionServers(3).numDataNodes(3).createWALDir(true).build();
+    UTIL.startMiniCluster(option);
+    
     cluster = UTIL.getMiniHBaseCluster();
+    testDirPath = Path.of(UTIL.getDataTestDir().toString());
+    
+    LOG.error(testDirPath);
     createTables();
     createHBaseTables();
-    
-    while(RowCache.instance == null) {
+     
+    while(useRowCache && RowCache.instance == null) {
       try {
         Thread.sleep(1000);
         LOG.error("WAIT 1s for row cache to come up");
@@ -421,8 +486,10 @@ public class HBasePerfTest {
         e.printStackTrace();
       }
     }
-    cache = RowCache.instance;
-    nativeCache = cache.getCache();
+    if (useRowCache) {
+      cache = RowCache.instance;
+      nativeCache = cache.getCache();
+    }
   }
   
   private static void configureSidecar (Configuration conf) throws IOException {
@@ -432,8 +499,8 @@ public class HBasePerfTest {
     conf.set("fs.hdfs.impl", SidecarDistributedFileSystem.class.getName());
     // Do not use cached instance - default
     conf.setBoolean("fs.hdfs.impl.disable.cache", true);
-
-    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_MODE_KEY, WriteCacheMode.ASYNC.getMode());
+    // Disable
+    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_MODE_KEY, WriteCacheMode.SYNC.getMode());
     conf.setLong(SidecarConfig.SIDECAR_WRITE_CACHE_SIZE_KEY, scWriteCacheMaxSize);
     conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_URI_KEY, scWriteCacheDirectoryURI.toString());
     conf.setBoolean(SidecarConfig.SIDECAR_TEST_MODE_KEY, true);
@@ -442,6 +509,13 @@ public class HBasePerfTest {
     // Set global cache directory
     // Files are immutable after creation
     conf.setBoolean(SidecarConfig.SIDECAR_REMOTE_FILES_MUTABLE_KEY, true);
+    conf.setBoolean(SidecarConfig.SIDECAR_SCAN_DETECTOR_ENABLED_KEY, true);
+    // Set scan pages 
+    conf.setInt(SidecarConfig.SIDECAR_SCAN_DETECTOR_THRESHOLD_PAGES_KEY, 100);
+    // Exclude list
+    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_EXCLUDE_LIST_KEY, 
+      ".*/oldWALs/.*,.*/archive/.*,.*/corrupt/.*,.*/staging/.*");
+    conf.set(SidecarConfig.SIDECAR_SCAN_DETECTOR_HINT_IMPL_KEY, HBaseScanDetectorHint.class.getName());
     
     CarrotConfig carrotCacheConfig = CarrotConfig.getInstance();
     // Set meta cache 
@@ -452,8 +526,20 @@ public class HBasePerfTest {
         conf = updateConfigurationOffheap(conf); break;
       case FILE: 
         conf = updateConfigurationFile(conf); break;
+      case DISABLED:
+        conf = updateConfigurationDisabled(conf);
       default:
     }
+  }
+  
+  private static Configuration updateConfigurationDisabled(Configuration conf) {
+    SidecarConfig cacheConfig = SidecarConfig.getInstance();
+    cacheConfig
+      .setDataCacheType(scCacheType)
+      .setDataPageSize(scPageSize)
+      .setIOBufferSize(scIOBufferSize);
+    
+    return getHdfsConfiguration(conf, cacheConfig, CarrotConfig.getInstance());
   }
   
   private static Configuration updateConfigurationFile(Configuration conf) {
@@ -461,8 +547,11 @@ public class HBasePerfTest {
     cacheConfig
       .setDataPageSize(scPageSize)
       .setIOBufferSize(scIOBufferSize)
-      .setDataCacheType(SidecarCacheType.FILE)
+      .setDataCacheType(SidecarDataCacheType.FILE)
       .setJMXMetricsEnabled(true);
+    
+    cacheConfig.setDataCacheMode(DataCacheMode.NOT_IN_WRITE_CACHE);
+    cacheConfig.setCacheableFileSizeThreshold(100 * (1 << 20)); // 100 MB
     
     CarrotConfig carrotCacheConfig = CarrotConfig.getInstance();
     
@@ -480,8 +569,8 @@ public class HBasePerfTest {
       carrotCacheConfig.setScavengerNumberOfThreads(SidecarConfig.DATA_CACHE_FILE_NAME, scScavThreads);      
     }
     
-    //carrotCacheConfig.setVictimCachePromotionOnHit(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteOnHit);
-    //carrotCacheConfig.setVictimPromotionThreshold(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteThreshold);
+    carrotCacheConfig.setVictimCachePromotionOnHit(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteOnHit);
+    carrotCacheConfig.setVictimPromotionThreshold(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteThreshold);
     
     return getHdfsConfiguration(conf, cacheConfig, carrotCacheConfig);
   }
@@ -491,7 +580,7 @@ public class HBasePerfTest {
     cacheConfig
       .setDataPageSize(scPageSize)
       .setIOBufferSize(scIOBufferSize)
-      .setDataCacheType(SidecarCacheType.OFFHEAP)
+      .setDataCacheType(SidecarDataCacheType.OFFHEAP)
       .setJMXMetricsEnabled(true);
     
     CarrotConfig carrotCacheConfig = CarrotConfig.getInstance();
@@ -532,10 +621,12 @@ public class HBasePerfTest {
     admin = conn.getAdmin();
     
     if( admin.tableExists(tableA.getTableName()) == false){
-      admin.createTable(tableA);
+      admin.createTable(tableA, new byte[] {0,0,0,0}, 
+        new byte[] { (byte) 255, (byte) 255, (byte) 255, (byte) 255}, 10);
       LOG.error("Created table "+tableA);
     }
     _tableA = (HTable) conn.getTable(TableName.valueOf(TABLE_A));
+    
   }
   
   private static void initForZipfianAndHybridConfiguration(Configuration conf) {
@@ -667,16 +758,21 @@ public class HBasePerfTest {
   }
 
   /**
-   * Start test.
-   * @param keyPrefix the key prefix
-   * @param number the number
-   * @param opNumber the op number
+   * Start test
+   * @param readPhase - read only phase
    * @return the execute thread[]
    */
-  static ExecuteThread[] startTest(String[] keyPrefix, int number) {
-    ExecuteThread[] threadArray = new ExecuteThread[number];
-    for (int i = 0; i < number; i++) {
+  static ExecuteThread[] startTest(boolean readPhase) {
+    String[] keyPrefix = new String[clientThreads];
+    for (int i = 0; i < clientThreads; i++) {
+      keyPrefix[i] = "Thread[" + i + "]";
+    }
+    ExecuteThread[] threadArray = new ExecuteThread[clientThreads];
+    for (int i = 0; i < clientThreads; i++) {
       threadArray[i] = new ExecuteThread(keyPrefix[i]);
+      if (readPhase) {
+        threadArray[i].setReadPhase();
+      }
       threadArray[i].start();
     }
     return threadArray;
@@ -759,16 +855,31 @@ public class HBasePerfTest {
     
     ThreadLocalRandom rnd = ThreadLocalRandom.current();
     
-
+    boolean loadPhase = true;
+    
     /**
      * Checks if is read request.
      * @return true, if is read request
      */
     private final boolean isReadRequest() {
-      double d = rnd.nextDouble();
-      return d > writeRatio;
+      if (testType == TestType.LOAD_THEN_READ) {
+        if (seqNumber.get() < toLoad) {
+          return false;
+        } else {
+          return true;
+        }
+      } else {
+        if (seqNumber.get() < 1000) {
+          return false;
+        }
+        double d = rnd.nextDouble();
+        return d > writeRatio;
+      }
     }
 
+    public void setReadPhase() {
+      loadPhase = false;
+    }
     /**
      * Calculate statistics
      */
@@ -922,16 +1033,11 @@ public class HBasePerfTest {
      * @param key the key
      */
     private void testPerf(String key) {
-      LOG.error("RowCache Performance test. Cache size =" + nativeCache.size() + ": "
+      LOG.error("RowCache Performance test. Cache size =" + (nativeCache != null? nativeCache.size(): 0) + ": "
           + Thread.currentThread().getName());
 
       try {
-        int c = 0;
-        // JIT warm up
-        while (c++ < 1000) {
-          innerLoop();
-        }
-
+ 
         totalTime = 0;
         totalRequests = 0;
         tt = System.nanoTime();
@@ -942,6 +1048,9 @@ public class HBasePerfTest {
         long stopTime = t1 + testTime;
         while (System.currentTimeMillis() < stopTime ) {
           innerLoop();
+          if (testType == TestType.LOAD_THEN_READ && loadPhase && seqNumber.get() >= toLoad) {
+            break;
+          }
         }
         LOG.error(getName() + ": Finished.");
       } catch (Exception e) {
@@ -965,9 +1074,9 @@ public class HBasePerfTest {
      * @return the next get index
      */
     private final long getNextGetIndex() {
-      long cacheSize = (cacheItemsLimit > 0) ? cacheItemsLimit : nativeCache.size();
+      long cacheSize =  cacheItemsLimit;
       long maxItemNumber = seqNumber.get();
-      
+      maxItemNumber -= clientThreads + 1;
       if (workloadType == WorkloadType.UNIFORM) {
         if (maxItemNumber > cacheSize) {
           return maxItemNumber - ((nextInt((int) cacheSize)));
@@ -999,14 +1108,41 @@ public class HBasePerfTest {
     private final void innerLoop() {
 
       long tt1 = System.nanoTime();
-      boolean isReadRequest = isReadRequest();// f > sWriteRatio;
-
+      boolean isReadRequest = isReadRequest();
+//      if (loadPhase && isReadRequest) {
+//        return;
+//      }
       if (isReadRequest) {
         try {
           long l = getNextGetIndex();
+          if (l < 0) l = 0;
+          if (l >= seqNumber.get() - clientThreads - 1) {
+            l = seqNumber.get() - clientThreads - 1;
+          }
           byte[] row = getRow(l);
-          @SuppressWarnings("unused")
-          List<Cell> results = getFromCache(row, map);
+          List<Cell> results = null;
+          
+          while((results = getFromCache(row, map)) == null) ;
+          
+          if (maxVersions * FAMILIES.length * COLUMNS.length !=  results.size()){  
+            LOG.info(String.format("Expected %d but got %d, index=%d", 
+              maxVersions * FAMILIES.length * COLUMNS.length, results.size(), l ));
+            byte[] arr = results.get(0).getRowArray();
+            int off = results.get(0).getRowOffset();
+            int len = results.get(0).getRowLength();
+            if (Utils.compareTo(row, 0, row.length, arr, off, len) != 0) {
+              LOG.error("\n\nWRONG ROW RECIEVED\n\n");
+            }
+            System.exit(-1);
+          }  else {
+            byte[] arr = results.get(0).getRowArray();
+            int off = results.get(0).getRowOffset();
+            int len = results.get(0).getRowLength();
+            if (Utils.compareTo(row, 0, row.length, arr, off, len) != 0) {
+              LOG.error("\n\nWRONG ROW RECIEVED\n\n");
+              System.exit(-1);
+            }
+          }
           GETS.incrementAndGet();
         } catch (Exception e) {
           LOG.error("get native call.", e);
@@ -1014,7 +1150,7 @@ public class HBasePerfTest {
         }
       } else {
         try {
-          long nextSeqNumber = seqNumber.incrementAndGet();
+          long nextSeqNumber = seqNumber.getAndIncrement();
           cacheRow(nextSeqNumber);
           PUTS.incrementAndGet();
         } catch (Exception e) {
@@ -1064,15 +1200,9 @@ public class HBasePerfTest {
    */
   static class StatsCollector extends Thread {
 
-    /** The m threads. */
     ExecuteThread[] mThreads;
-
-    /** The m interval. */
     long mInterval;
-
-    /** The m start time. */
     long mStartTime;
-
     /**
      * Instantiates a new stats collector.
      * @param interval the interval
@@ -1088,11 +1218,10 @@ public class HBasePerfTest {
     public void run() {
       
       if (rcCacheType == CacheType.HYBRID) {
-        Scavenger.Stats stats1 = Scavenger.getStatisticsForCache(CacheType.OFFHEAP.getCacheName());
-        Scavenger.Stats stats2 = Scavenger.getStatisticsForCache(CacheType.FILE.getCacheName());
-
+        Scavenger.getStatisticsForCache(CacheType.OFFHEAP.getCacheName());
+        Scavenger.getStatisticsForCache(CacheType.FILE.getCacheName());
       } else {
-        Scavenger.Stats stats = Scavenger.getStatisticsForCache(rcCacheType.getCacheName());
+        Scavenger.getStatisticsForCache(rcCacheType.getCacheName());
       }
       while (true) {
         if (Thread.interrupted()) {
@@ -1139,24 +1268,28 @@ public class HBasePerfTest {
             + "\n         99.99%=" + t9999 
             + "\n    TOTAL ITEMS=" + getTotalItems() 
             + "\n   ACTIVE ITEMS=" + getTotalActiveItems() 
-            + "\n           GETS=" + getTotalRequests() 
+            + "\n           GETS=" + GETS.get()//getTotalRequests() 
             + "\n           HITS=" + getTotalHits()
+            + "\n           PUTS=" + PUTS.get()
             + "\n ALLOCATED SIZE=" + getMemAllocated() 
             + "\n      USED SIZE=" + getRawSize()
-            + "\n   TOTAL WRITES=" + getTotalWrites()
-            + "\nREJECTED WRITES=" + getTotalRejectedWrites());
-        Scavenger.printStats();
-            
+            + "\n   TOTAL WRITES=" + getTotalWrites());
+            //+ "\n  TEST DIR SIZE=" + TestUtils.format(TestUtils.getDirectorySize(testDirPath)));
+        if (scCacheType != SidecarDataCacheType.DISABLED) {
+          Scavenger.printStats();
+          SidecarCachingFileSystem.getDataCache().printStats();
+          SidecarCachingFileSystem.getMetaCache().printStats();  
+        }
       }
     }
   }
 
   public static String getTotalWrites() {
-    return Long.toString(nativeCache.getTotalWrites());
+    return nativeCache != null? Long.toString(nativeCache.getTotalWrites()): "0";
   }
   
   public static String getTotalRejectedWrites() {
-    return Long.toString(nativeCache.getTotalRejectedWrites());
+    return nativeCache != null? Long.toString(nativeCache.getTotalRejectedWrites()): "0";
   }
   
   /**
@@ -1164,6 +1297,9 @@ public class HBasePerfTest {
    * @return the total items
    */
   public static String getTotalItems() {
+    if (nativeCache == null) {
+      return "0";
+    }
     long size = nativeCache.size();
     Cache victim = nativeCache.getVictimCache();
     if (victim != null) {
@@ -1177,6 +1313,9 @@ public class HBasePerfTest {
    * @return the total items
    */
   public static String getTotalActiveItems() {
+    if (nativeCache == null) {
+      return "0";
+    }
     long size = nativeCache.activeSize();
     Cache victim = nativeCache.getVictimCache();
     if (victim != null) {
@@ -1190,6 +1329,9 @@ public class HBasePerfTest {
    * @return the memory allocated
    */
   public static String getMemAllocated() {
+    if (nativeCache == null) {
+      return "0";
+    }
     long size = nativeCache.getStorageAllocated();
     Cache victim = nativeCache.getVictimCache();
     if (victim != null) {
@@ -1203,6 +1345,9 @@ public class HBasePerfTest {
    * @return the raw size
    */
   public static String getRawSize() {
+    if (nativeCache == null) {
+      return "0";
+    }
     long size = nativeCache.getStorageUsed();
     Cache victim = nativeCache.getVictimCache();
     if (victim != null) {
@@ -1216,6 +1361,9 @@ public class HBasePerfTest {
    * @return the total requests
    */
   public static String getTotalRequests() {
+    if (nativeCache == null) {
+      return "0";
+    }
     return Long.toString(nativeCache.getTotalGets());
   }
 
@@ -1224,6 +1372,9 @@ public class HBasePerfTest {
    * @return the total hits
    */
   public static String getTotalHits() {
+    if (nativeCache == null) {
+      return "0";
+    }
     long hits = nativeCache.getTotalHits();
     Cache victim = nativeCache.getVictimCache();
     if (victim != null) {
@@ -1285,22 +1436,10 @@ public class HBasePerfTest {
    * @return the row
    */
   static byte[] getRow(long i) {
-    return ("rowxxxxxxx" + format(i, 10)).getBytes();
-  }
-  
-  private static String format(long l, int n) {
-    String s = Long.toString(l);
-    // n > s.length
-    StringBuffer sb = new StringBuffer();
-    for (int i = 0; i < n; i++) {
-      if (i < n - s.length()) {
-        sb.append("0");
-      } else {
-        sb.append(s);
-        break;
-      }
-    }
-    return sb.toString();
+    Random r = new Random(i);
+    byte[] row = new byte[16];
+    r.nextBytes(row);
+    return row;
   }
   
   /**
@@ -1333,6 +1472,7 @@ public class HBasePerfTest {
         }
       }
     }
+
     Collections.sort(list, CellComparator.getInstance());
     return list;
   }
@@ -1344,12 +1484,21 @@ public class HBasePerfTest {
   protected static void createTables() {
 
     ColumnFamilyDescriptor famA = ColumnFamilyDescriptorBuilder.newBuilder(FAMILIES[0])
+        .setBlocksize(blockSize)
+        .setBlockCacheEnabled(hbaseBlockCacheEnabled)
+        .setMaxVersions(maxVersions)
         .setValue(RConstants.ROWCACHE, "true".getBytes()).build();
 
     ColumnFamilyDescriptor famB = ColumnFamilyDescriptorBuilder.newBuilder(FAMILIES[1])
+        .setBlocksize(blockSize)
+        .setMaxVersions(maxVersions)
+        .setBlockCacheEnabled(hbaseBlockCacheEnabled)
         .setValue(RConstants.ROWCACHE, "true".getBytes()).build();
 
     ColumnFamilyDescriptor famC = ColumnFamilyDescriptorBuilder.newBuilder(FAMILIES[2])
+        .setBlocksize(blockSize)
+        .setMaxVersions(maxVersions)
+        .setBlockCacheEnabled(hbaseBlockCacheEnabled)
         .setValue(RConstants.ROWCACHE, "true".getBytes()).build();
 
     tableA = TableDescriptorBuilder.newBuilder(TableName.valueOf(TABLE_A)).setColumnFamily(famA)

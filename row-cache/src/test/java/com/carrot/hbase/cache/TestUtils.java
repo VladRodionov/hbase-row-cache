@@ -14,6 +14,12 @@
  */
 package com.carrot.hbase.cache;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.text.DecimalFormat;
+import java.util.stream.Stream;
+
 import org.apache.hadoop.hbase.Cell;
 
 public class TestUtils {
@@ -43,5 +49,32 @@ public class TestUtils {
     byte[] buf = new byte[len];
     System.arraycopy(array, off, buf, 0, len);
     return buf;
+  }
+  
+  public static long getDirectorySize(Path path) {
+    long size = 0;
+    // need close Files.walk
+    try (Stream<Path> walk = Files.walk(path)) {
+      size = walk
+          // .peek(System.out::println) // debug
+          .filter(Files::isRegularFile).mapToLong(p -> {
+            // ugly, can pretty it with an extract method
+            try {
+              return Files.size(p);
+            } catch (IOException e) {
+              System.out.printf("Failed to get size of %s%n%s", p, e);
+              return 0L;
+            }
+          }).sum();
+
+    } catch (IOException e) {
+      System.out.printf("IO errors %s", e);
+    }
+    return size;
+  }
+  
+  public static String format(long value) {
+    DecimalFormat df = new DecimalFormat("###,###,###,###");
+    return df.format(value);
   }
 }
