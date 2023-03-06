@@ -18,11 +18,11 @@
             <artifactId>row-cache</artifactId>
             <version>1.0.0</version>
         </dependency>
-        <dependency>
+        <!--dependency>
             <groupId>org.bigbase</groupId>
             <artifactId>block-cache</artifactId>
             <version>1.0.0</version>
-        </dependency>
+        </dependency-->
     </dependencies>
 
     <build>

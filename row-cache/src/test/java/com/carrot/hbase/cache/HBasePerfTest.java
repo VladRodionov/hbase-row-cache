@@ -35,6 +35,8 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.math3.distribution.ZipfDistribution;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -72,6 +74,7 @@ import com.carrot.hbase.cache.utils.IOUtils;
 import com.carrot.sidecar.SidecarCachingFileSystem;
 import com.carrot.sidecar.WriteCacheMode;
 import com.carrot.sidecar.fs.hdfs.SidecarDistributedFileSystem;
+import com.carrot.sidecar.fs.s3a.SidecarS3AFileSystem;
 import com.carrot.sidecar.hints.HBaseScanDetectorHint;
 import com.carrot.sidecar.DataCacheMode;
 import com.carrot.sidecar.SidecarConfig;
@@ -122,7 +125,7 @@ public class HBasePerfTest {
   private final static Logger LOG = Logger.getLogger(PerfTest.class);
 
   /** The test time. */
-  private static long testTime = 3600000;// 1 hour
+  private static long testTime = 3 * 3600000;// 3 hours
 
   /** The write ratio. */
   private static float writeRatio = 0.05f; // 10% puts - 90% gets
@@ -224,7 +227,7 @@ public class HBasePerfTest {
   static RowCache cache;
 
   /* Use row cache */
-  static boolean useRowCache = true;
+  static boolean useRowCache = false;
   
   /** The table descriptor */
   static TableDescriptor tableA;
@@ -244,15 +247,15 @@ public class HBasePerfTest {
   
   /* SIDECAR configuration SECTION */
   
-  static SidecarDataCacheType scCacheType = SidecarDataCacheType.DISABLED;
+  static SidecarDataCacheType scCacheType = SidecarDataCacheType.FILE;
   
-  static long scWriteCacheMaxSize = 10L * (1 << 30);
+  static long scWriteCacheMaxSize = 5L * (1 << 30);
   
-  static long scFileCacheSize = 10L * (1L << 30);
+  static long scFileCacheSize = 15L * (1L << 30);
   
   static int scFileDataSegmentSize = 64 * (1 << 20);
   
-  static long scOffheapCacheSize = 10L * (1L << 30);
+  static long scOffheapCacheSize = 5L * (1L << 30);
   
   static int scOffheapDataSegmentSize = 4 * (1 << 20);
   
@@ -296,7 +299,7 @@ public class HBasePerfTest {
   /* HBase Admin interface*/
   static Admin admin;
   
-  static boolean hbaseBlockCacheEnabled = true;
+  static boolean hbaseBlockCacheEnabled = false;
   
   static enum TestType{
     LOAD_AND_READ,
@@ -305,6 +308,14 @@ public class HBasePerfTest {
 
   static TestType testType = TestType.LOAD_AND_READ;
   
+  /**
+   * Minio server access
+   */
+  protected static String S3_ENDPOINT = "http://localhost:9000";
+  protected static String S3_BUCKET = "s3a://hbase";
+  protected static String ACCESS_KEY = "admin";
+  protected static String SECRET_KEY = "password";
+  protected static boolean s3run = false;
   /**
    * The main method.
    * @param args the arguments
@@ -400,10 +411,10 @@ public class HBasePerfTest {
    */
   private static void init() throws Exception {
     blockSize = 4096;
-    scPageSize = 4096;
-    scIOBufferSize = 256 * scPageSize; // 1MB
-    useRowCache = false;
-    hbaseBlockCacheEnabled = false;
+    scPageSize = 2048;
+    scIOBufferSize = 512 * scPageSize; // 1MB
+    //useRowCache = false;
+    //hbaseBlockCacheEnabled = false;
     
     long start = System.currentTimeMillis();
     LOG.error("Generating " + M + " rows took: " + (System.currentTimeMillis() - start) + " ms");
@@ -428,7 +439,10 @@ public class HBasePerfTest {
     conf.set("hbase.regionserver.global.memstore.size", "0.5");
     conf.set("hfile.block.cache.size", "0.2");
     //conf.set("hbase.wal.provider", "filesystem");
-    
+    conf.set("hbase.store.file-tracker.impl", "FILE");
+    if (s3run) {
+      configureS3(conf);
+    }
     // Cache configuration
     dataDir = Files.createTempDirectory("temp");
     LOG.error("Data directory: " + dataDir);
@@ -492,15 +506,52 @@ public class HBasePerfTest {
     }
   }
   
+  private static void configureS3(Configuration configuration) {
+    configuration.set("fs.s3a.impl", SidecarS3AFileSystem.class.getName());
+    
+    configuration.set("fs.s3a.access.key", ACCESS_KEY);
+    configuration.set("fs.s3a.secret.key", SECRET_KEY);
+    configuration.setBoolean("fs.s3a.path.style.access", true);
+    configuration.set("fs.s3a.block.size", "512M");
+    configuration.setBoolean("fs.s3a.committer.magic.enabled", false);
+    configuration.set("fs.s3a.committer.name", "directory");
+    configuration.setBoolean("fs.s3a.committer.staging.abort.pending.uploads", true);
+    configuration.set("fs.s3a.committer.staging.conflict-mode","append");
+    configuration.setBoolean("fs.s3a.committer.staging.unique-filenames", true);
+    configuration.setInt("fs.s3a.connection.establish.timeout", 50000);
+    configuration.setBoolean("fs.s3a.connection.ssl.enabled", false);
+    configuration.setInt("fs.s3a.connection.timeout", 200000);
+    configuration.set("fs.s3a.endpoint", S3_ENDPOINT);
+
+    configuration.setInt("fs.s3a.committer.threads", 64);// Number of threads writing to MinIO
+    configuration.setInt("fs.s3a.connection.maximum", 8192);// Maximum number of concurrent conns
+    configuration.setInt("fs.s3a.fast.upload.active.blocks", 2048);// Number of parallel uploads
+    configuration.set("fs.s3a.fast.upload.buffer", "disk");//Use drive as the buffer for uploads
+    configuration.setBoolean("fs.s3a.fast.upload", true);//Turn on fast upload mode
+    configuration.setInt("fs.s3a.max.total.tasks", 2048);// Maximum number of parallel tasks
+    configuration.set("fs.s3a.multipart.size", "64M");//  Size of each multipart chunk
+    configuration.set("fs.s3a.multipart.threshold", "64M");//Size before using multipart uploads
+    configuration.setInt("fs.s3a.socket.recv.buffer", 65536);// Read socket buffer hint
+    configuration.setInt("fs.s3a.socket.send.buffer", 65536);// Write socket buffer hint
+    configuration.setInt("fs.s3a.threads.max", 256);//  Maximum number of threads for S3A
+    configuration.set("hbase.rootdir", S3_BUCKET + "/data");
+    configuration.set("fs.s3a.aws.credentials.provider", SimpleAWSCredentialsProvider.class.getName());    
+    // S3Guard
+    //configuration.set("fs.s3a.metadatastore.impl", LocalMetadataStore.class.getName());
+  }
+  
   private static void configureSidecar (Configuration conf) throws IOException {
     
     scWriteCacheDirectoryURI = Files.createTempDirectory("write").toUri();
     
-    conf.set("fs.hdfs.impl", SidecarDistributedFileSystem.class.getName());
-    // Do not use cached instance - default
-    conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+    if (!s3run) {
+      conf.set("fs.hdfs.impl", SidecarDistributedFileSystem.class.getName());
+      // Do not use cached instance - default
+      conf.setBoolean("fs.hdfs.impl.disable.cache", true);
+    }
+
     // Disable
-    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_MODE_KEY, WriteCacheMode.SYNC.getMode());
+    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_MODE_KEY, WriteCacheMode.DISABLED.getMode());
     conf.setLong(SidecarConfig.SIDECAR_WRITE_CACHE_SIZE_KEY, scWriteCacheMaxSize);
     conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_URI_KEY, scWriteCacheDirectoryURI.toString());
     conf.setBoolean(SidecarConfig.SIDECAR_TEST_MODE_KEY, true);

@@ -9,7 +9,7 @@
     <url>http://www.server.com</url>
     <modules>
         <module>row-cache</module>
-        <module>block-cache</module>
+        <!--module>block-cache</module-->
         <module>dist</module>
   </modules>
     <build>
@@ -95,11 +95,11 @@
     		<artifactId>carrot-cache</artifactId>
     		<version>0.5.0-SNAPSHOT</version>
            </dependency>
-	   <!--dependency>
+	   <dependency>
     		<groupId>org.bigbase</groupId>
     		<artifactId>sidecar</artifactId>
     		<version>0.5.0-SNAPSHOT</version>
-           </dependency-->	
+           </dependency>	
            <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-core</artifactId>
@@ -122,6 +122,16 @@
                 <artifactId>commons-math3</artifactId>
                 <version>3.6.1</version>
                 <scope>test</scope>
+        </dependency>
+        <dependency>
+                <groupId>org.apache.commons</groupId>
+                <artifactId>commons-lang3</artifactId>
+                <version>3.4</version>
+        </dependency>
+       <dependency>
+                <groupId>com.amazonaws</groupId>
+                <artifactId>aws-java-sdk-bundle</artifactId>
+                <version>1.11.271</version>
         </dependency>
         </dependencies>
     </dependencyManagement>
