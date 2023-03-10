@@ -167,10 +167,47 @@
         <value>1048576</value>
 </property>	
 <property>
-        <name>sidecar.data.page.size</name>
-        <description> Sidecar data page size (in bytes). Default: 1MB
+        <name>sidecar.io.buffer.size</name>
+        <description> Sidecar I/O buffer size (in bytes). This is data prefetch buffer. Default: 4MB
 	</description>
-        <value>1048576</value>
+        <value></value>
 </property>	
-	
+<property>
+        <name>sidecar.io.pool.size</name>
+        <description> This is object pool size to keep prefetch buffers (refer to the above option) to avoid constant byte buffer allocations.
+		Default: 32
+	</description>
+        <value>32</value>
+</property>	
+<property>
+        <name>sidecar.jmx.metrics.enabled</name>
+        <description> Sidecar JMX metrics enabled. Default: true
+	</description>
+        <value>true</value>
+</property>	
+<property>
+        <name>sidecar.jmx.metrics.domain.name</name>
+        <description> Sidecar JMX metrics domain name. Default: SidecarFS
+	</description>
+        <value>SidecarFS</value>
+</property>	
+<property>
+        <name>sidecar.data.cache.type</name>
+        <description> Sidecar JMX data cache type.  Available options: OFFHEAP, FILE, HYBRID. Default: FILE
+	</description>
+        <value>FILE</value>
+</property>
+<property>
+        <name>sidecar.cache.persistent</name>
+        <description> Are SidecarFS data and meta caches persistent. Default: true. Content of caches will be saved to a
+		disk upon server's shutdown.
+	</description>
+        <value>true</value>
+</property>
+<property>
+        <name>sidecar.cache.persistent</name>
+        <description> Sidecar data and meta caches persistent.Default: true
+	</description>
+        <value>true</value>
+</property>	
 </configuration>
