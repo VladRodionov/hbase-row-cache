@@ -139,7 +139,7 @@
 <!--
 
     **************************************************
-    *  Sidecar - specific configuration parameters  
+    *  Sidecar FS - specific configuration parameters  
     **************************************************
 -->	
 <property>
