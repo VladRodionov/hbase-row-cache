@@ -25,6 +25,17 @@
 <!--
 
     **************************************************
+    *  Common Cache configuration parameters (For all caches in the system)
+    **************************************************
+-->
+<property>
+        <name>c2.root.dir-path</name>
+        <description>Cache root directory - where to save cached data</description>
+        <value>.</value>
+</property>
+<!--
+
+    **************************************************
     *  Row Cache - specific configuration parameters *
     **************************************************
 -->
@@ -59,18 +70,7 @@
         <description>I/O buffer size (in bytes)</description>
         <value>1048576</value>
 </property>
-
-<!--
-
-    **************************************************
-    *  Common Row Cache configuration parameters *
-    **************************************************
--->
-<property>
-        <name>c2.root.dir-path</name>
-        <description>Cache root directory - where to save cached data</description>
-        <value>.</value>
-</property>	
+	
 <!--
 
     **************************************************
@@ -150,7 +150,7 @@
 </property>
 <property>
         <name>sidecar.write.cache.uri</name>
-        <description> Sidecar write buffer (cache) location. Eaxmple: file:///some-path-to-write-cache
+        <description> Sidecar write buffer (cache) location. Example: file:///some-path-to-write-cache
 	</description>
         <value></value>
 </property>
@@ -205,9 +205,168 @@
         <value>true</value>
 </property>
 <property>
-        <name>sidecar.cache.persistent</name>
-        <description> Sidecar data and meta caches persistent.Default: true
+        <name>sidecar.caching.hint.detector.impl</name>
+        <description> Sidecar Caching Hint Detector implementation class name. Default: null
+	</description>
+        <value></value>
+</property>	
+<property>
+        <name>sidecar.thread.pool.max.size</name>
+        <description> This thread pool is used to sync write cache and remote FS as well as 
+   		to clean cache upon file deletion or rename. Default: 8
+	</description>
+        <value>8</value>
+</property>
+<property>
+        <name>sidecar.read.exclude.path.list</name>
+        <description> Comma-separated list of regular expressions of directory names in the
+   remote file system, which must be excluded from caching on read. By default, SidecarFS caches ALL reads
+   (except when caching hint detector if provided forbids caching). Deafult: null
+	</description>
+        <value></value>
+</property>
+<property>
+        <name>sidecar.write.include.path.list</name>
+        <description> Comma-separated list of regular expressions of directory names in the
+   remote file system, which must be included to caching on write. By default, SidecarFS doesn not cache in write. Deafult: null
+	</description>
+        <value></value>
+</property>		
+<property>
+        <name>sidecar.write.cache.mode</name>
+        <description> Write cache mode. Available options: DISABLED, SYNC (default), ASYNC_CLOSE (remote file is closed asynchronously),
+		ASYNC_COPY (file from write cache is being copied to the remote FS asynchronously.
+	</description>
+        <value>SYNC</value>
+</property>	
+<property>
+        <name>sidecar.remote.files.mutable</name>
+        <description> Are remote files mutable? In general? Mutability means, file content 
+   		can be changed after creation (appended or fully rewritten). Default: true
 	</description>
         <value>true</value>
-</property>	
+</property>
+<property>
+        <name>sidecar.data.cache.mode</name>
+        <description> How to cache data on read: ALL (caches all reads), MINSIZE (caches data from files which size is over minimum
+		threshold), NOT_IN_WRITE_CACHE (caches data from files which are not in a write cache). Default: ALL
+	</description>
+        <value>ALL</value>
+</property>
+<property>
+        <name>sidecar.cache.minsize.threshold</name>
+        <description> If cache data mode == MINSIZE - this is the threshold in bytes.
+	</description>
+        <value>ALL</value>
+</property>
+<property>
+        <name>sidecar.write.cache.exclude.list</name>
+        <description> Comma-separated list of directory patterns to exclude from write cache (write buffer). Default: null
+	</description>
+        <value></value>
+</property>
+
+<!--
+
+    **************************************************
+    *  Sidecar Offheap Data Page Cache - specific configuration parameters *
+    **************************************************
+-->
+<property>
+        <name>sidecar-data-offheap.c2.storage.max-size</name>
+        <description>Maximum memory allocated to off-heap sidecar FS data page cache (in bytes). Default: 0</description>
+        <value>10000000000</value>
+</property>
+	
+<property>
+        <name>sidecar-data-offheap.c2.data.segment-size</name>
+        <description>Data segment size of off-heap sidecar FS data page cache (in bytes). Default: 4MB</description>
+        <value>4931584</value>
+</property>
+<property>
+        <name>sidecar-data-offheap.c2.eviction-policy-impl</name>
+        <description>Eviction policy implementation class name for offheap sidecar FS data page  cache. 
+		Default: SLRUEvictionPolicy. Available options:
+		com.carrot.cache.eviction.LRUEvictionPolicy and com.carrot.cache.eviction.FIFOEvictionPolicy
+	</description>
+        <value>com.carrot.cache.eviction.SLRUEvictionPolicy</value>
+</property>
+<property>
+        <name>sidecar-data-offheap.c2.recycling-selector-impl</name>
+        <description>Recycling selector implementation class name for offheap sidecar FS data page cache. 
+		Default: LRCRecyclingSelector (Least-Recently-Created).
+		Available options:
+		com.carrot.cache.controllers.LRCRecyclingSelector, com.carrot.cache.controllers.MinAliveRecyclingSelector
+	</description>
+        <value>com.carrot.cache.controllers.LRCRecyclingSelector</value>
+</property>
+<!--
+
+    **************************************************
+    *  Sidecar FS File Data Page Cache - specific configuration parameters *
+    **************************************************
+-->
+<property>
+        <name>sidecar-data-file.c2.storage.max-size</name>
+        <description>Maximum memory allocated to file-based sidecar FS data page cache (in bytes). Default: 0</description>
+        <value>10000000000</value>
+</property>
+	
+<property>
+        <name>sidecar-data-file.c2.data.segment-size</name>
+        <description>Data segment size of file sidecar FS data page cache (in bytes). Default: 64MB</description>
+        <value>268,435,456</value>
+</property>
+<property>
+        <name>sidecar-data-file.c2.eviction-policy-impl</name>
+        <description>Eviction policy implementation class name for file sidecar FS data page cache. 
+		Default: SLRUEvictionPolicy. Available options:
+		com.carrot.cache.eviction.LRUEvictionPolicy and com.carrot.cache.eviction.FIFOEvictionPolicy
+	</description>
+        <value>com.carrot.cache.eviction.SLRUEvictionPolicy</value>
+</property>
+<property>
+        <name>sidecar-data-file.c2.recycling-selector-impl</name>
+        <description>Recycling selector implementation class name for file-based sidecar FS data page cache. 
+		Default: LRCRecyclingSelector (Least-Recently-Created).
+		Available options:
+		com.carrot.cache.controllers.LRCRecyclingSelector, com.carrot.cache.controllers.MinAliveRecyclingSelector
+	</description>
+        <value>com.carrot.cache.controllers.LRCRecyclingSelector</value>
+</property>
+<!--
+
+    **************************************************
+    *  Sidecar FS Meta Data Cache - specific configuration parameters 
+    * Meta data cache is always offheap.
+    **************************************************
+-->
+<property>
+        <name>sidecar-meta-offheap.c2.storage.max-size</name>
+        <description>Maximum memory allocated to  sidecar FS meta datacache (in bytes). Default: 0</description>
+        <value>10000000000</value>
+</property>
+	
+<property>
+        <name>sidecar-meta-offheap.c2.data.segment-size</name>
+        <description>Data segment size of sidecar FS meta data cache (in bytes). Default: 4MB</description>
+        <value>4000000</value>
+</property>
+<property>
+        <name>sidecar-meta-offheap.c2.eviction-policy-impl</name>
+        <description>Eviction policy implementation class name for sidecar FS meta data cache. 
+		Default: SLRUEvictionPolicy. Available options:
+		com.carrot.cache.eviction.LRUEvictionPolicy and com.carrot.cache.eviction.FIFOEvictionPolicy
+	</description>
+        <value>com.carrot.cache.eviction.SLRUEvictionPolicy</value>
+</property>
+<property>
+        <name>sidecar-meta-offheap.c2.recycling-selector-impl</name>
+        <description>Recycling selector implementation class name for sidecar FS meta data cache. 
+		Default: LRCRecyclingSelector (Least-Recently-Created).
+		Available options:
+		com.carrot.cache.controllers.LRCRecyclingSelector, com.carrot.cache.controllers.MinAliveRecyclingSelector
+	</description>
+        <value>com.carrot.cache.controllers.LRCRecyclingSelector</value>
+</property>
 </configuration>
