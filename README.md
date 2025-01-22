@@ -1,2 +1,3 @@
-# BigBase2
-BigBase 8 years later, powered by C2 and updated to HBase 2.x 
+# HBase Row Cache
+HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-cache)  and updated to HBase 2.x. This cache is impelemented as HBase co-processor and can be easily installed into any HBase cluster.
+Apache HBase is an open-source, distributed, versioned, column-oriented store modeled after Google' Bigtable: A Distributed Storage System for Structured Data by Chang et al. Just as Bigtable leverages the distributed data storage provided by the Google File System, HBase provides Bigtable-like capabilities on top of Apache Hadoop. The official HBase still lacks one BigTable feature, namely - Scan Cache, which caches frequently requested key-value pairs. 
