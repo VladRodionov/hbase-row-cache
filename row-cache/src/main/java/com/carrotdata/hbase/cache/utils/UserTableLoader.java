@@ -26,8 +26,8 @@ import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
 
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -47,7 +47,7 @@ import com.carrotdata.hbase.cache.RConstants;
 @SuppressWarnings("deprecation")
 public class UserTableLoader {
   /** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(UserTableLoader.class);
+  static final Logger LOG = LoggerFactory.getLogger(UserTableLoader.class);
   private static byte[] TABLE = "usertable".getBytes();
   private static byte[] FAMILY = "cf".getBytes();
   private static byte[] COLUMN = "col".getBytes();

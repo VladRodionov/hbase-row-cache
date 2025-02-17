@@ -23,15 +23,13 @@ import java.util.NavigableSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Append;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
@@ -42,9 +40,8 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
-
-import com.carrotdata.hbase.cache.RConstants;
-import com.carrotdata.hbase.cache.RowCache;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 // TODO: Auto-generated Javadoc
@@ -54,7 +51,7 @@ import com.carrotdata.hbase.cache.RowCache;
 public class BaseTest {
 
  	/** The Constant LOG. */
-	 static final Log LOG = LogFactory.getLog(BaseTest.class);	
+	 static final Logger LOG = LoggerFactory.getLogger(BaseTest.class);	
 	/** The table a. */
 	protected static byte[] TABLE_A = "TABLE_A".getBytes();
 	

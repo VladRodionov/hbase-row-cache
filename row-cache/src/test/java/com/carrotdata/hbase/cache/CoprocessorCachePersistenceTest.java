@@ -24,8 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -46,10 +46,6 @@ import org.junit.After;
 import org.junit.Before;
 
 import com.carrotdata.cache.util.CacheConfig;
-import com.carrotdata.hbase.cache.CacheType;
-import com.carrotdata.hbase.cache.RowCache;
-import com.carrotdata.hbase.cache.RowCacheConfig;
-import com.carrotdata.hbase.cache.RowCacheCoprocessor;
 import com.carrotdata.hbase.cache.utils.IOUtils;
 
 
@@ -59,7 +55,7 @@ import com.carrotdata.hbase.cache.utils.IOUtils;
 public class CoprocessorCachePersistenceTest extends BaseTest{
 
   /** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(CoprocessorCachePersistenceTest.class);
+  static final Logger LOG = LoggerFactory.getLogger(CoprocessorCachePersistenceTest.class);
     
   /** The util. */
   private static HBaseTestingUtility UTIL = new HBaseTestingUtility();  
@@ -95,9 +91,9 @@ public class CoprocessorCachePersistenceTest extends BaseTest{
     // Cache configuration
     conf.set(CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
     // Set cache type to 'offheap'
-    conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.OFFHEAP.getType());
+    conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.MEMORY.getType());
     // set cache size to 1GB
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
       Integer.toString(1 << 30));
     
     // Enable snapshot
@@ -296,7 +292,7 @@ public class CoprocessorCachePersistenceTest extends BaseTest{
     for(byte[] row: map.keySet()){
       List<Cell> list = map.get(row);
       for(Cell kv : list){
-        LOG.error(kv);
+        LOG.error("", kv);
       }
     }
   }

@@ -21,8 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -40,10 +40,6 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 import com.carrotdata.cache.util.CacheConfig;
-import com.carrotdata.hbase.cache.CacheType;
-import com.carrotdata.hbase.cache.RowCache;
-import com.carrotdata.hbase.cache.RowCacheConfig;
-import com.carrotdata.hbase.cache.RowCacheCoprocessor;
 import com.carrotdata.hbase.cache.utils.IOUtils;;
 
 
@@ -53,7 +49,7 @@ import com.carrotdata.hbase.cache.utils.IOUtils;;
 public class CoprocessorBaseTest extends BaseTest {
 
 	/** The Constant LOG. */
-	static final Log LOG = LogFactory.getLog(CoprocessorBaseTest.class);
+	static final Logger LOG = LoggerFactory.getLogger(CoprocessorBaseTest.class);
 	  
 	/** The util. */
 	private static HBaseTestingUtility UTIL = new HBaseTestingUtility();	
@@ -89,7 +85,7 @@ public class CoprocessorBaseTest extends BaseTest {
 	 /** The n. */
   static int N = 10000;
   
-  static CacheType cacheType = CacheType.OFFHEAP;
+  static CacheType cacheType = CacheType.MEMORY;
   
   static long offheapCacheSize = 1L << 30;
   
@@ -110,7 +106,7 @@ public class CoprocessorBaseTest extends BaseTest {
     // Set cache type to 'offheap'
     conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, cacheType.getType());
     
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
       Long.toString(offheapCacheSize));
     
     conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
@@ -261,7 +257,7 @@ public class CoprocessorBaseTest extends BaseTest {
 		for(byte[] row: map.keySet()){
 			List<Cell> list = map.get(row);
 			for(Cell kv : list){
-				LOG.error(kv);
+				LOG.error("",kv);
 			}
 		}
 		

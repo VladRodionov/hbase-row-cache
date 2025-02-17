@@ -21,8 +21,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Optional;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.client.Append;
@@ -84,7 +84,7 @@ public class RowCacheCoprocessor implements RegionCoprocessor, RegionObserver {
 
 
   /** The Constant LOG. */
-    static final Log LOG = LogFactory.getLog(RowCacheCoprocessor.class);      
+    static final Logger LOG = LoggerFactory.getLogger(RowCacheCoprocessor.class);      
   /** The scan cache. */
   RowCache rowCache;
   

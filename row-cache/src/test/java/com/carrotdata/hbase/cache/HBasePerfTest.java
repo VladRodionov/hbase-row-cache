@@ -69,13 +69,6 @@ import com.carrotdata.cache.controllers.MinAliveRecyclingSelector;
 import com.carrotdata.cache.eviction.SLRUEvictionPolicy;
 import com.carrotdata.cache.util.CacheConfig;
 import com.carrotdata.cache.util.Utils;
-import com.carrotdata.hbase.cache.CacheType;
-import com.carrotdata.hbase.cache.EvictionPolicy;
-import com.carrotdata.hbase.cache.RConstants;
-import com.carrotdata.hbase.cache.RecyclingSelector;
-import com.carrotdata.hbase.cache.RowCache;
-import com.carrotdata.hbase.cache.RowCacheConfig;
-import com.carrotdata.hbase.cache.RowCacheCoprocessor;
 import com.carrotdata.hbase.cache.utils.IOUtils;
 import com.carrotdata.sidecar.DataCacheMode;
 import com.carrotdata.sidecar.SidecarCachingFileSystem;
@@ -199,7 +192,7 @@ public class HBasePerfTest {
   private static int rcScavNumberThreads = 1;
   
   /* Cache type */
-  private static CacheType rcCacheType = CacheType.OFFHEAP;
+  private static CacheType rcCacheType = CacheType.MEMORY;
 
   /** END of Row-Cache SECTION */
   
@@ -458,9 +451,9 @@ public class HBasePerfTest {
     
     if (useRowCache) {
       switch (rcCacheType) {
-        case OFFHEAP:
+        case MEMORY:
           // Set cache type to 'offheap'
-          conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.OFFHEAP.getType());
+          conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.MEMORY.getType());
           initOffheapConfiguration(conf);
           cacheItemsLimit = rcOffheapCacheItemsLimit;
           break;
@@ -699,7 +692,7 @@ public class HBasePerfTest {
         Boolean.toString(rc_victim_promoteOnHit));
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CacheConfig.CACHE_VICTIM_PROMOTION_THRESHOLD_KEY),
         Double.toString(rc_victim_promoteThreshold));
-      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_HYBRID_INVERSE_MODE_KEY),
+      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_HYBRID_INVERSE_MODE_KEY),
         Boolean.toString(rcHybridCacheInverseMode));
     }
   }
@@ -755,26 +748,26 @@ public class HBasePerfTest {
       recyclingSelector = rcOffheapRecyclingSelector;
     }
     
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
       Long.toString(rcOffheapCacheSizeLimit));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_EVICTION_POLICY_IMPL_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_EVICTION_POLICY_IMPL_KEY),
       evictionPolicy.getClassName());
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.CACHE_RECYCLING_SELECTOR_IMPL_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.CACHE_RECYCLING_SELECTOR_IMPL_KEY),
       recyclingSelector.getClassName());
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_START_RUN_RATIO_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_START_RUN_RATIO_KEY), 
       Double.toString(0.99));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_STOP_RUN_RATIO_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_STOP_RUN_RATIO_KEY), 
       Double.toString(0.95));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_NUMBER_THREADS_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_NUMBER_THREADS_KEY),
       Integer.toString(rcScavNumberThreads));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
       Double.toString(1.0));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_SEGMENT_SIZE_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_SEGMENT_SIZE_KEY), 
       Long.toString(rcOffheapCacheSegmentSize));
     if (rcACForOffheapCache && workloadType == WorkloadType.ZIPFIAN) {
-      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_ADMISSION_CONTROLLER_IMPL_KEY),
+      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_ADMISSION_CONTROLLER_IMPL_KEY),
         AQBasedAdmissionController.class.getName());
-      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.ADMISSION_QUEUE_START_SIZE_RATIO_KEY),
+      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.ADMISSION_QUEUE_START_SIZE_RATIO_KEY),
         Double.toString(rcACRatioForOffheapCache));
     }
   }
@@ -1081,7 +1074,7 @@ public class HBasePerfTest {
         testPerf(getName());
       } catch (Exception e) {
         e.printStackTrace();
-        LOG.error(e);
+        LOG.error("", e);
       }
     }
 
@@ -1112,7 +1105,7 @@ public class HBasePerfTest {
         LOG.error(getName() + ": Finished.");
       } catch (Exception e) {
         e.printStackTrace();
-        LOG.error(e);
+        LOG.error("", e);
         System.exit(-1);
       }
     }
@@ -1275,7 +1268,7 @@ public class HBasePerfTest {
     public void run() {
       
       if (rcCacheType == CacheType.HYBRID) {
-        Scavenger.getStatisticsForCache(CacheType.OFFHEAP.getCacheName());
+        Scavenger.getStatisticsForCache(CacheType.MEMORY.getCacheName());
         Scavenger.getStatisticsForCache(CacheType.FILE.getCacheName());
       } else {
         Scavenger.getStatisticsForCache(rcCacheType.getCacheName());

@@ -29,8 +29,8 @@ import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
@@ -49,8 +49,6 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import com.carrotdata.cache.util.CacheConfig;
-import com.carrotdata.hbase.cache.RowCache;
-import com.carrotdata.hbase.cache.RowCacheConfig;
 import com.carrotdata.hbase.cache.utils.IOUtils;
 
 
@@ -62,7 +60,7 @@ import com.carrotdata.hbase.cache.utils.IOUtils;
 public class RowCacheTest extends BaseTest{
 
 	/** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(RowCacheTest.class);	
+  static final Logger LOG = LoggerFactory.getLogger(RowCacheTest.class);	
 	/* Tables */
 
   /** The n. */
@@ -84,9 +82,9 @@ public class RowCacheTest extends BaseTest{
     // Cache configuration
     conf.set(CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
     // Set cache type to 'offheap' - FIXME
-    conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, "offheap");
+    conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.MEMORY.getType());
     // set cache size to 1GB
-    conf.set(RowCacheConfig.CACHE_OFFHEAP_NAME + "." + CacheConfig.CACHE_MAXIMUM_SIZE_KEY,
+    conf.set(RowCacheConfig.CACHE_MEMORY_NAME + "." + CacheConfig.CACHE_MAXIMUM_SIZE_KEY,
       Long.toString(memoryLimit));
 
     cache = new RowCache();

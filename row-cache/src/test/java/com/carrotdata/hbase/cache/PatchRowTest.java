@@ -16,8 +16,8 @@ package com.carrotdata.hbase.cache;
 
 import static org.junit.Assert.assertEquals;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hbase.KeyValue;
 import org.junit.Test;
 
@@ -27,7 +27,7 @@ import org.junit.Test;
 public class PatchRowTest extends BaseTest {
 
   /** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(PatchRowTest.class);
+  static final Logger LOG = LoggerFactory.getLogger(PatchRowTest.class);
 
   /**
    * Test key value patch.

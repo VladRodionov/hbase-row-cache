@@ -28,8 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.KeyValue;
@@ -55,7 +55,7 @@ import org.junit.Test;
 public class CoprocessorOpsTest extends CoprocessorBaseTest {
 
   /** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(CoprocessorOpsTest.class);
+  static final Logger LOG = LoggerFactory.getLogger(CoprocessorOpsTest.class);
 
   /**
    * Test put all.
@@ -103,6 +103,7 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
       // assertEquals(0, cache.getFromCache());
 
     }
+    assertEquals(N, found);
     LOG.error("Test get from HBase finished in " + (System.currentTimeMillis() - start)
         + "ms. Found " + found + " objects.");
 
@@ -126,6 +127,7 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
       assertEquals(list.size(), cache.getFromCache());
 
     }
+    //FIXME: cache size is not accurate b/c it does not count objects in write buffers
     assertEquals(N * FAMILIES.length, cache.size());
     LOG.error("Test get from cache finished in " + (System.currentTimeMillis() - start) + "ms");
 
@@ -384,12 +386,13 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
   private void testDelete() throws IOException {
     LOG.error("Test delete started");
     byte[] row = getRow(data.get(0).get(0));
-    LOG.error(" Delete row: " + new String(row));
+    LOG.error(" Delete row: " + new String(row) + " cache size="+ cache.size());
 
     Delete del = createDelete(row);
     _tableA.delete(del);
 
     // Verify size : 1 row = 3 KVs deleted
+    //FIXME: cache size is inaccurate
     assertEquals((N - 1) * FAMILIES.length, cache.size());
     Get get = createGet(row, null, null, null);
     get.readVersions(Integer.MAX_VALUE);
@@ -439,6 +442,7 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
 
     assertTrue(result.isEmpty());
     assertEquals(0, cache.getFromCache());
+    LOG.error("1) Cache size=" + cache.size());
     // Verify that other families are in cache
     fam.clear();
     fam.add(FAMILIES[1]);
@@ -451,11 +455,13 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
     assertEquals((FAMILIES.length - 1) * COLUMNS.length * VERSIONS, result.size());
     // Verify all from cache
     assertEquals((FAMILIES.length - 1) * COLUMNS.length * VERSIONS, cache.getFromCache());
+    LOG.error("2) Cache size=" + cache.size());
 
     // Delete row:family:col
     del = new Delete(row);
     del.addColumns(FAMILIES[1], COLUMNS[0]);
     _tableA.delete(del);
+    LOG.error("3) Cache size=" + cache.size());
 
     // Verify what is still in cache (only FAMILY[2])
     fam.clear();
@@ -469,9 +475,12 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
     assertEquals((FAMILIES.length - 1) * COLUMNS.length * VERSIONS - (1) * VERSIONS, result.size());
     // Verify all from cache
     assertEquals((FAMILIES.length - 2) * COLUMNS.length * VERSIONS, cache.getFromCache());
+    LOG.error("4) Cache size=" + cache.size());
 
     // Restore row
     restoreRow(0);
+    LOG.error("5) Cache size=" + cache.size());
+
     LOG.error("Test delete finished OK");
   }
 
@@ -481,7 +490,7 @@ public class CoprocessorOpsTest extends CoprocessorBaseTest {
    */
   private void testUpdate() throws IOException {
     int index = 1;
-    LOG.error("Test update started. Testing " + index + " row");
+    LOG.error("Test update started. Testing " + index + " row, cache size="+ cache.size());
 
     byte[] row = getRow(data.get(index).get(0));
     LOG.error(" Update row: " + new String(row));

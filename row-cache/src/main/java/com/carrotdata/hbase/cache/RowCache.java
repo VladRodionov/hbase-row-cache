@@ -32,8 +32,9 @@ import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -123,7 +124,7 @@ import com.carrotdata.hbase.cache.utils.Utils;
 public class RowCache {
 
   /** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(RowCache.class);
+  static final Logger LOG = LoggerFactory.getLogger(RowCache.class);
   /*
    *  Default buffer size is 256K (It does not make sense to cache rows larger
    *  than 256K anyway.
@@ -251,7 +252,7 @@ public class RowCache {
 
   private void setCacheType(CacheConfig config, CacheType type) {
     if (type == CacheType.HYBRID) {
-      addCacheType(config, CacheType.OFFHEAP);
+      addCacheType(config, CacheType.MEMORY);
       addCacheType(config, CacheType.FILE);
     } else {
       addCacheType(config, type);
@@ -323,7 +324,7 @@ public class RowCache {
               Arrays.toString(config.getCacheRootDirs(rowCache.getName()))));
           }
         } else {
-          rowCache = Cache.loadCache(RowCacheConfig.CACHE_OFFHEAP_NAME);
+          rowCache = Cache.loadCache(RowCacheConfig.CACHE_MEMORY_NAME);
           if (rowCache != null) {
             LOG.info(String.format("Loaded cache[%s] from the path: %s\n", rowCache.getName(),
               Arrays.toString(config.getCacheRootDirs(rowCache.getName()))));
@@ -346,7 +347,7 @@ public class RowCache {
         rowCache = new Cache(cacheType.getCacheName(), config);
         LOG.info(String.format("Created new cache[%s]\n", rowCache.getName()));
       } else {
-        rowCache = new Cache(RowCacheConfig.CACHE_OFFHEAP_NAME, config);
+        rowCache = new Cache(RowCacheConfig.CACHE_MEMORY_NAME, config);
         LOG.info(String.format("Created new cache[%s]\n", rowCache.getName()));
         Cache victimCache = new Cache(RowCacheConfig.CACHE_FILE_NAME, config);
         rowCache.setVictimCache(victimCache);
@@ -373,15 +374,15 @@ public class RowCache {
   
   void saveRowCache() throws IOException {
     long start = System.currentTimeMillis();
-    LOG.info(String.format("Shutting down cache[%s]\n", RowCacheConfig.CACHE_OFFHEAP_NAME));
+    LOG.info(String.format("Shutting down cache[%s]\n", RowCacheConfig.CACHE_MEMORY_NAME));
     rowCache.shutdown();
     long end = System.currentTimeMillis();
-    LOG.info(String.format("Shutting down cache[%s] done in %dms\n", RowCacheConfig.CACHE_OFFHEAP_NAME, (end - start)));
+    LOG.info(String.format("Shutting down cache[%s] done in %dms\n", RowCacheConfig.CACHE_MEMORY_NAME, (end - start)));
   }
   
   void deleteCacheData() {
     CacheConfig config = CacheConfig.getInstance();
-    String[] offheapCachePaths = config.getCacheRootDirs(CacheType.OFFHEAP.getCacheName());
+    String[] offheapCachePaths = config.getCacheRootDirs(CacheType.MEMORY.getCacheName());
     // delete recursively
     for (String path: offheapCachePaths) {
       File dir = new File(path);

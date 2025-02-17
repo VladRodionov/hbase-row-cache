@@ -28,8 +28,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileSystem;
@@ -56,7 +56,7 @@ import org.apache.hadoop.hbase.client.Table;
 public class TableLocality {
 
   /** The Constant LOG. */
-  static final Log LOG = LogFactory.getLog(TableLocality.class);
+  static final Logger LOG = LoggerFactory.getLogger(TableLocality.class);
 
   /**
    * The Enum Command.
@@ -109,15 +109,14 @@ public class TableLocality {
       tableRoot = new Path(config.get("hbase.rootdir"), table.getNameAsString());
 
     } catch (MasterNotRunningException e) {
-      LOG.error(e);
+      LOG.error("", e);
     } catch (ZooKeeperConnectionException e) {
-      LOG.error(e);
+      LOG.error("", e);
     } catch (IOException e) {
-      LOG.error(e);
+      LOG.error("", e);
     } catch (URISyntaxException e) {
-      LOG.error(e);
+      LOG.error("", e);
     }
-
   }
 
   /**
@@ -130,14 +129,11 @@ public class TableLocality {
       case REGION_INFO:
         dumpRegionsWithLocality(table);
         break;
-
     }
-
   }
 
   private static void dumpRegionsWithLocality(TableName t) throws IOException {
     // TODO Auto-generated method stub
-    ;
     List<HRegionInfo> regions = admin.getTableRegions(t);
     Map<String, List<Path>> serverMap = new HashMap<String, List<Path>>();
     for (HRegionInfo ri : regions) {

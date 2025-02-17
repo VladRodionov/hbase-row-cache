@@ -26,24 +26,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Get;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.carrotdata.cache.util.CacheConfig;
-import com.carrotdata.hbase.cache.RowCache;
-import com.carrotdata.hbase.cache.RowCacheConfig;
 
 /**
  * The Class SingleThreadPerfTest.
  */
 public class SingleThreadPerfTest extends BaseTest{
 	  /** The Constant LOG. */
-  	static final Log LOG = LogFactory.getLog(SingleThreadPerfTest.class);
+  	static final Logger LOG = LoggerFactory.getLogger(SingleThreadPerfTest.class);
 	// Total number of Rows to test
 	static int N = 100000;
 	static Path dataDir;
@@ -58,9 +56,9 @@ public class SingleThreadPerfTest extends BaseTest{
     // Cache configuration
     conf.set(CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
     // Set cache type to 'offheap' - FIXME
-    conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, "offheap");
+    conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.MEMORY.getType());
     // set cache size to 1GB
-    conf.set(RowCacheConfig.CACHE_OFFHEAP_NAME + "." + CacheConfig.CACHE_MAXIMUM_SIZE_KEY,
+    conf.set(RowCacheConfig.CACHE_MEMORY_NAME + "." + CacheConfig.CACHE_MAXIMUM_SIZE_KEY,
       Long.toString(1L<< 31));
 
     cache = new RowCache();

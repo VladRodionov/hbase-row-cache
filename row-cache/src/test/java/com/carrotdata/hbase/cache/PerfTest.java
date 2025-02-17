@@ -29,6 +29,7 @@ import java.util.TreeSet;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.commons.math3.distribution.ZipfDistribution;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
@@ -47,7 +48,6 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.log4j.Logger;
-import org.apache.commons.math3.distribution.ZipfDistribution;
 
 import com.carrotdata.cache.Cache;
 import com.carrotdata.cache.Scavenger;
@@ -56,12 +56,6 @@ import com.carrotdata.cache.io.Segment;
 import com.carrotdata.cache.io.SegmentScanner;
 import com.carrotdata.cache.util.CacheConfig;
 import com.carrotdata.cache.util.Utils;
-import com.carrotdata.hbase.cache.CacheType;
-import com.carrotdata.hbase.cache.EvictionPolicy;
-import com.carrotdata.hbase.cache.RConstants;
-import com.carrotdata.hbase.cache.RecyclingSelector;
-import com.carrotdata.hbase.cache.RowCache;
-import com.carrotdata.hbase.cache.RowCacheConfig;
 import com.carrotdata.hbase.cache.utils.IOUtils;
 
 /**
@@ -109,7 +103,7 @@ public class PerfTest {
   private final static Logger LOG = Logger.getLogger(PerfTest.class);
 
   /** The test time. */
-  private static long testTime = 3000000;// 3000 secs
+  private static long testTime = 30000;// 3000 secs
 
   /** The write ratio. */
   private static float writeRatio = 0.1f; // 10% puts - 90% gets
@@ -217,7 +211,7 @@ public class PerfTest {
 
   static Path dataDir;
 
-  static CacheType cacheType = CacheType.HYBRID;
+  static CacheType cacheType = CacheType.MEMORY;
   
   static WorkloadType workloadType = WorkloadType.ZIPFIAN;
   
@@ -251,8 +245,8 @@ public class PerfTest {
     LOG.info("Total time=" + (t2 - t1) + " ms");
     LOG.info("Estimated RPS=" + ((double) (PUTS.get() + GETS.get()) * 1000) / (t2 - t1));
     
-    dumpStats();
-    
+    //dumpStats();
+    cache.getCache().shutdown();
     IOUtils.deleteRecursively(dataDir.toFile());
   }
   
@@ -361,9 +355,9 @@ public class PerfTest {
     conf.set(CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
     
     switch (cacheType) {
-      case OFFHEAP:
+      case MEMORY:
         // Set cache type to 'offheap'
-        conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.OFFHEAP.getType());
+        conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, CacheType.MEMORY.getType());
         initOffheapConfiguration(conf);
         cacheItemsLimit = offheapCacheItemsLimit;
         break;
@@ -405,7 +399,7 @@ public class PerfTest {
         Boolean.toString(victim_promoteOnHit));
       conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CacheConfig.CACHE_VICTIM_PROMOTION_THRESHOLD_KEY),
         Double.toString(victim_promoteThreshold));
-      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_HYBRID_INVERSE_MODE_KEY),
+      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_HYBRID_INVERSE_MODE_KEY),
         Boolean.toString(hybridCacheInverseMode));
     }
   }
@@ -461,26 +455,26 @@ public class PerfTest {
       recyclingSelector = offheapRecyclingSelector;
     }
     
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
       Long.toString(offheapCacheSizeLimit));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_EVICTION_POLICY_IMPL_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_EVICTION_POLICY_IMPL_KEY),
       evictionPolicy.getClassName());
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.CACHE_RECYCLING_SELECTOR_IMPL_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.CACHE_RECYCLING_SELECTOR_IMPL_KEY),
       recyclingSelector.getClassName());
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_START_RUN_RATIO_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_START_RUN_RATIO_KEY), 
       Double.toString(0.99));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_STOP_RUN_RATIO_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_STOP_RUN_RATIO_KEY), 
       Double.toString(0.95));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_NUMBER_THREADS_KEY),
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_NUMBER_THREADS_KEY),
       Integer.toString(scavNumberThreads));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP,CacheConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY,CacheConfig.SCAVENGER_DUMP_ENTRY_BELOW_MIN_KEY), 
       Double.toString(1.0));
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_SEGMENT_SIZE_KEY), 
+    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_SEGMENT_SIZE_KEY), 
       Long.toString(offheapCacheSegmentSize));
     if (acForOffheapCache && workloadType == WorkloadType.ZIPFIAN) {
-      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.CACHE_ADMISSION_CONTROLLER_IMPL_KEY),
+      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_ADMISSION_CONTROLLER_IMPL_KEY),
         AQBasedAdmissionController.class.getName());
-      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.OFFHEAP, CacheConfig.ADMISSION_QUEUE_START_SIZE_RATIO_KEY),
+      conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.ADMISSION_QUEUE_START_SIZE_RATIO_KEY),
         Double.toString(acRatioForOffheapCache));
     }
   }
@@ -766,7 +760,7 @@ public class PerfTest {
       try {
         testPerf(getName());
       } catch (Exception e) {
-        LOG.error(e);
+        LOG.error("", e);
       }
     }
 
@@ -799,7 +793,7 @@ public class PerfTest {
         LOG.info(getName() + ": Finished.");
       } catch (Exception e) {
         e.printStackTrace();
-        LOG.error(e);
+        LOG.error("", e);
         System.exit(-1);
       }
     }
@@ -944,7 +938,7 @@ public class PerfTest {
     public void run() {
       
       if (cacheType == CacheType.HYBRID) {
-        Scavenger.Stats stats1 = Scavenger.getStatisticsForCache(CacheType.OFFHEAP.getCacheName());
+        Scavenger.Stats stats1 = Scavenger.getStatisticsForCache(CacheType.MEMORY.getCacheName());
         Scavenger.Stats stats2 = Scavenger.getStatisticsForCache(CacheType.FILE.getCacheName());
 
       } else {

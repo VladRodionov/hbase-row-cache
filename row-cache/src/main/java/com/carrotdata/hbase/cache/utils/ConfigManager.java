@@ -20,8 +20,8 @@ package com.carrotdata.hbase.cache.utils;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HColumnDescriptor;
@@ -47,7 +47,7 @@ import com.carrotdata.hbase.cache.RConstants;
 public class ConfigManager {
 
     /** The Constant LOG. */
-    static final Log LOG = LogFactory.getLog(ConfigManager.class);	 
+    static final Logger LOG = LoggerFactory.getLogger(ConfigManager.class);	 
 	  
 	/**
 	 * The Enum Command.
@@ -116,11 +116,11 @@ public class ConfigManager {
 		  connection = ConnectionFactory.createConnection(config);
 			admin = connection.getAdmin();
 		} catch (MasterNotRunningException e) {
-			LOG.error(e);
+			LOG.error("", e);
 		} catch (ZooKeeperConnectionException e) {
-			LOG.error(e);
+			LOG.error("", e);
 		} catch (IOException e) {
-			LOG.error(e);
+			LOG.error("", e);
 	  }
 	}
 	
@@ -206,10 +206,10 @@ public class ConfigManager {
 			LOG.info("LIST:\n");
 			List<TableDescriptor> tables = admin.listTableDescriptors();
 			for(TableDescriptor t: tables){
-				LOG.info(t.getTableName());
+				LOG.info("{}", t.getTableName());
 			}
 		}catch(Exception e){
-			LOG.error(e);
+			LOG.error("", e);
 		}
 	}
 
@@ -234,7 +234,7 @@ public class ConfigManager {
 				LOG.info("Family "+new String(c.getName())+": ROWCACHE=" + status);
 			}
 		}catch(Exception e){
-			LOG.error(e);
+			LOG.error("", e);
 		}
 		
 	}
@@ -271,7 +271,7 @@ public class ConfigManager {
 			}
 
 		}catch(Exception e){
-			LOG.error(e);
+			LOG.error("", e);
 		}		
 		
 	}
@@ -307,7 +307,7 @@ public class ConfigManager {
 			}
 
 		}catch(Exception e){
-			LOG.error(e);
+			LOG.error("", e);
 		}		
 		
 	}

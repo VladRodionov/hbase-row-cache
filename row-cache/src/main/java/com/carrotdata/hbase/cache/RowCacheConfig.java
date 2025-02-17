@@ -23,8 +23,8 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 
 import com.carrotdata.cache.util.CacheConfig;
@@ -34,9 +34,9 @@ public class RowCacheConfig extends Properties {
   
   private static final long serialVersionUID = 1L;
   
-  static final Log LOG = LogFactory.getLog(RowCacheConfig.class);  
+  static final Logger LOG = LoggerFactory.getLogger(RowCacheConfig.class);  
 
-  public final static String CACHE_OFFHEAP_NAME = "rowcache-offheap";
+  public final static String CACHE_MEMORY_NAME = "rowcache-memory";
   
   public final static String CACHE_FILE_NAME = "rowcache-file";
   
@@ -67,7 +67,7 @@ public class RowCacheConfig extends Properties {
   
   public final static long DEFAULT_ROWCACHE_FILE_SEGMENT_SIZE = (1 << 26); // 64MB
   
-  public final static CacheType DEFAULT_ROWCACHE_TYPE = CacheType.OFFHEAP;
+  public final static CacheType DEFAULT_ROWCACHE_TYPE = CacheType.MEMORY;
   
   public final static EvictionPolicy DEFAULT_OFFHEAP_EVICTION_POLICY = EvictionPolicy.SLRU;
   
@@ -117,8 +117,8 @@ public class RowCacheConfig extends Properties {
 
   public static String toCarrotPropertyName(CacheType type, String name) {
     switch(type) {
-      case OFFHEAP:
-        return CACHE_OFFHEAP_NAME + "." + name;
+      case MEMORY:
+        return CACHE_MEMORY_NAME + "." + name;
       case FILE:
         return CACHE_FILE_NAME + "." + name;
       case HYBRID:
@@ -198,8 +198,8 @@ public class RowCacheConfig extends Properties {
   public long getCacheMaxSize(CacheType type) {
     long size;
     switch(type) {
-      case OFFHEAP:
-        size = carrotConfig.getCacheMaximumSize(CACHE_OFFHEAP_NAME);
+      case MEMORY:
+        size = carrotConfig.getCacheMaximumSize(CACHE_MEMORY_NAME);
         if (size == 0) {
           size = DEFAULT_ROWCACHE_OFFHEAP_SIZE;
         }
@@ -239,8 +239,8 @@ public class RowCacheConfig extends Properties {
   public long getCacheSegmentSize(CacheType type) {
     long size;
     switch(type) {
-      case OFFHEAP:
-        size = carrotConfig.getCacheSegmentSize(CACHE_OFFHEAP_NAME);
+      case MEMORY:
+        size = carrotConfig.getCacheSegmentSize(CACHE_MEMORY_NAME);
         if (size == 0) {
           size = DEFAULT_ROWCACHE_OFFHEAP_SEGMENT_SIZE;
         }

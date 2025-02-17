@@ -19,7 +19,7 @@ package com.carrotdata.hbase.cache;
 
 public enum CacheType {
   
-  OFFHEAP("offheap"),
+  MEMORY("memory"),
   FILE("file"),
   HYBRID("hybrid");
   
@@ -35,13 +35,13 @@ public enum CacheType {
   
   public String getCacheName() {
     switch(this) {
-      case OFFHEAP: return RowCacheConfig.CACHE_OFFHEAP_NAME;
+      case MEMORY: return RowCacheConfig.CACHE_MEMORY_NAME;
       case FILE: return RowCacheConfig.CACHE_FILE_NAME;
       default: return null;
     }
   }
   
   public static CacheType defaultType() {
-    return CacheType.OFFHEAP;
+    return CacheType.MEMORY;
   }
 }

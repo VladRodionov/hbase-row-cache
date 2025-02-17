@@ -18,8 +18,8 @@
 package com.carrotdata.hbase.cache;
 
 public enum RecyclingSelector {
-  LRC("com.carrot.cache.controllers.LRCRecyclingSelector"),
-  MinAlive("com.carrot.cache.controllers.MinAliveRecyclingSelector");
+  LRC("com.carrotdata.cache.controllers.LRCRecyclingSelector"),
+  MinAlive("com.carrotdata.cache.controllers.MinAliveRecyclingSelector");
   
   private final String className;
   

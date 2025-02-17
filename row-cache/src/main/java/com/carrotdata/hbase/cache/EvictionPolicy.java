@@ -18,9 +18,9 @@
 package com.carrotdata.hbase.cache;
 
 public enum EvictionPolicy {
-  LRU("com.carrot.cache.eviction.LRUEvictionPolicy"),
-  SLRU("com.carrot.cache.eviction.SLRUEvictionPolicy"),
-  FIFO("com.carrot.cache.eviction.FIFOEvictionPolicy");
+  LRU("com.carrotdata.cache.eviction.LRUEvictionPolicy"),
+  SLRU("com.carrotdata.cache.eviction.SLRUEvictionPolicy"),
+  FIFO("com.carrotdata.cache.eviction.FIFOEvictionPolicy");
   
   private final String className;
   EvictionPolicy(String className){

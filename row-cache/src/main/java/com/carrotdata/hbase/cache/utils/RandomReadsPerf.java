@@ -26,8 +26,8 @@ import java.util.TimerTask;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -42,7 +42,7 @@ import org.apache.hadoop.hbase.client.Table;
 
 public class RandomReadsPerf {
     /** The Constant LOG. */
-    static final Log LOG = LogFactory.getLog(RandomReadsPerf.class);	
+    static final Logger LOG = LoggerFactory.getLogger(RandomReadsPerf.class);	
     private static TableName TABLE = TableName.valueOf("usertable".getBytes());
     
 	private static String THREADS = "-t";
