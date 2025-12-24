@@ -78,14 +78,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 ## Dependencies
 
 * [Carrot Cache](https://www.github.com/carrotdata/carrot-cache). This is new open source caching library under Apache 2.0 license. Cache implementation can be made pluggable.
-* [Sidecar](https://www.github.com/VladRodionov/sidecar). This is the Caching Hadoop-compatible file system which supports HDFS, S3a, all Azures, Google Cloud Storage, Open Shift,
-  and a couple of Chinese Cloud storages. This dependency is experimantal and can be removed. Its purpose is to improve Read (and Write!!!) performance of HBase in a cloud environments.
-  This is a replacement for file-based block caches, compared to HBase block cache, in memory metadata overhead is 10x lower than in Block Cache, plus there are some interesting features on a write path - `Sidecar`
-  supports caching writes as well via introduction of a write caching file system (for example, HDFS is used not only for WALs but for caching most recent writes - memstore flushes etc). 
-  Not sure if it is important, so this dependency can be removed.
 
 ## How to build
 
-* Build and install [Carrot Cache](https://www.github.com/carrotdata/carrot-cache)
-* Build and install  [Sidecar](https://www.github.com/VladRodionov/sidecar)
-* Run `mvn clean install -DskipTests` for a `hbase-row-cache`
+* Run `mvn clean install -DskipTests` for a `hbase-row-cache`. After build is complete you will get the binaries under `dist/target` directory. 
