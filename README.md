@@ -18,7 +18,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 * Supports in-memory, disk-only and hybrid modes.
 * Cache size: 100's of GBs to TBs of RAM/Disk with low predictable query latency.
 * Can be used with the following eviction policies (LRU, S-LRU, FIFO). S-LRU is default.
-* Pure 100% - compatible Java. The only native code is Zstd compression codecs (Linux x86 and Mac OSX). It can works on any Java platform with compression disabled.
+* Pure 100% - compatible Java. The only native code are Zstd compression codecs (multiple platforms are supported out of the box). It can works on any Java platform with compression disabled.
 * Sub-millisecond latencies (on network),  zero GC.
 * Implemented as RegionObserver co-processor.
 * Easy installation and configuration. 
