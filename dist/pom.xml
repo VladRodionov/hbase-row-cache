@@ -2,72 +2,60 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <artifactId>distribution</artifactId>
-    <packaging>pom</packaging>
-    <name>Distribution</name>
-    <parent>
-        <groupId>org.bigbase</groupId>
-        <artifactId>BigBase2</artifactId>
-        <version>1.0.0</version>
-    </parent>
+  <modelVersion>4.0.0</modelVersion>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.bigbase</groupId>
-            <artifactId>row-cache</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-        <!--dependency>
-            <groupId>org.bigbase</groupId>
-            <artifactId>block-cache</artifactId>
-            <version>1.0.0</version>
-        </dependency-->
-    </dependencies>
+  <parent>
+    <groupId>io.carrotdata</groupId>
+    <artifactId>hbase-row-cache</artifactId>
+    <version>0.5.0</version>
+    <relativePath>../pom.xml</relativePath>
+  </parent>
 
-    <build>
-        <plugins>
-            <!--plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>2.4</version>
-                <executions>
-                    <execution>
-                        <id>row-cache-assembly</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                        <configuration>
-                            <descriptors>
-                                <descriptor>src/main/assemble/row-cache-assembly.xml</descriptor>
-                            </descriptors>
-                            <appendAssemblyId>false</appendAssemblyId>
-                            <finalName>row-cache-${version}</finalName>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin-->
+  <artifactId>dist</artifactId>
+  <packaging>pom</packaging>
+  <name>Distribution</name>
 
-            <plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <version>2.4</version>
-                <executions>
-                    <execution>
-                        <id>bigbase-assembly</id>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                        <configuration>
-                            <descriptors>
-                                <descriptor>src/main/assemble/bigbase-assembly.xml</descriptor>
-                            </descriptors>
-                            <appendAssemblyId>false</appendAssemblyId>
-                            <finalName>bigbase-${version}</finalName>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
+<dependencies>
+  <dependency>
+    <groupId>io.carrotdata</groupId>
+    <artifactId>row-cache</artifactId>
+    <version>${project.parent.version}</version>
+  </dependency>
+
+  <dependency>
+    <groupId>io.carrotdata</groupId>
+    <artifactId>carrot-cache</artifactId>
+    <!-- version can be omitted if parent dependencyManagement provides it -->
+  </dependency>
+</dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>3.7.1</version>
+        <executions>
+          <execution>
+            <id>rowcache-assembly</id>
+            <phase>package</phase>
+            <goals>
+              <goal>single</goal>
+            </goals>
+            <configuration>
+              <descriptors>
+                <descriptor>src/main/assemble/rowcache-assembly.xml</descriptor>
+              </descriptors>
+              <appendAssemblyId>false</appendAssemblyId>
+              <finalName>rowcache-${project.version}</finalName>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  <properties>
+  <maven.install.skip>true</maven.install.skip>
+  <maven.deploy.skip>true</maven.deploy.skip>
+</properties>
 </project>

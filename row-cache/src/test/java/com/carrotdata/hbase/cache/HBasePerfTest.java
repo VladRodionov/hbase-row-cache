@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.math3.distribution.ZipfDistribution;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
+import org.apache.hadoop.fs.s3a.*;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -70,14 +70,7 @@ import com.carrotdata.cache.eviction.SLRUEvictionPolicy;
 import com.carrotdata.cache.util.CacheConfig;
 import com.carrotdata.cache.util.Utils;
 import com.carrotdata.hbase.cache.utils.IOUtils;
-import com.carrotdata.sidecar.DataCacheMode;
-import com.carrotdata.sidecar.SidecarCachingFileSystem;
-import com.carrotdata.sidecar.SidecarConfig;
-import com.carrotdata.sidecar.SidecarDataCacheType;
-import com.carrotdata.sidecar.WriteCacheMode;
-import com.carrotdata.sidecar.fs.hdfs.SidecarDistributedFileSystem;
-import com.carrotdata.sidecar.fs.s3a.SidecarS3AFileSystem;
-import com.carrotdata.sidecar.hints.HBaseCachingHintDetector;
+
 
 /**
  * HBase + RowCache multi-threaded performance test
@@ -245,9 +238,7 @@ public class HBasePerfTest {
   static WorkloadType workloadType = WorkloadType.ZIPFIAN;
   
   /* SIDECAR configuration SECTION */
-  
-  static SidecarDataCacheType scCacheType = SidecarDataCacheType.FILE;
-  
+    
   static long scWriteCacheMaxSize = 5L * (1 << 30);
   
   static long scFileCacheSize = 15L * (1L << 30);
@@ -371,8 +362,6 @@ public class HBasePerfTest {
     if (nativeCache != null) {
       nativeCache.printStats();
     }
-    SidecarCachingFileSystem.getDataCache().printStats();
-    SidecarCachingFileSystem.getMetaCache().printStats();
     IOUtils.deleteRecursively(dataDir.toFile());
     IOUtils.deleteRecursively(new File(scWriteCacheDirectoryURI.getPath()));
   }
@@ -477,7 +466,6 @@ public class HBasePerfTest {
     }
     
     initForZipfianAndHybridConfiguration(conf);
-    configureSidecar(conf);
     StartMiniClusterOption option = StartMiniClusterOption.builder()
         .numRegionServers(3).numDataNodes(3).createWALDir(true).build();
     UTIL.startMiniCluster(option);
@@ -506,7 +494,7 @@ public class HBasePerfTest {
   }
   
   private static void configureS3(Configuration configuration) {
-    configuration.set("fs.s3a.impl", SidecarS3AFileSystem.class.getName());
+    configuration.set("fs.s3a.impl", org.apache.hadoop.fs.s3a.S3AFileSystem.class.getName());
     
     configuration.set("fs.s3a.access.key", ACCESS_KEY);
     configuration.set("fs.s3a.secret.key", SECRET_KEY);
@@ -537,132 +525,6 @@ public class HBasePerfTest {
     configuration.set("fs.s3a.aws.credentials.provider", SimpleAWSCredentialsProvider.class.getName());    
     // S3Guard
     //configuration.set("fs.s3a.metadatastore.impl", LocalMetadataStore.class.getName());
-  }
-  
-  private static void configureSidecar (Configuration conf) throws IOException {
-    
-    scWriteCacheDirectoryURI = Files.createTempDirectory("write").toUri();
-    
-    if (!s3run) {
-      conf.set("fs.hdfs.impl", SidecarDistributedFileSystem.class.getName());
-      // Do not use cached instance - default
-      conf.setBoolean("fs.hdfs.impl.disable.cache", true);
-    }
-
-    // Disable
-    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_MODE_KEY, WriteCacheMode.DISABLED.getMode());
-    conf.setLong(SidecarConfig.SIDECAR_WRITE_CACHE_SIZE_KEY, scWriteCacheMaxSize);
-    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_URI_KEY, scWriteCacheDirectoryURI.toString());
-    conf.setBoolean(SidecarConfig.SIDECAR_TEST_MODE_KEY, true);
-    conf.setBoolean(SidecarConfig.SIDECAR_JMX_METRICS_ENABLED_KEY, true);
-    conf.setBoolean(SidecarConfig.SIDECAR_INSTALL_SHUTDOWN_HOOK_KEY, true);
-    // Set global cache directory
-    // Files are immutable after creation
-    conf.setBoolean(SidecarConfig.SIDECAR_REMOTE_FILES_MUTABLE_KEY, true);
-    conf.setBoolean(SidecarConfig.SIDECAR_SCAN_DETECTOR_ENABLED_KEY, true);
-    // Set scan pages 
-    conf.setInt(SidecarConfig.SIDECAR_SCAN_DETECTOR_THRESHOLD_PAGES_KEY, 100);
-    // Exclude list
-    conf.set(SidecarConfig.SIDECAR_WRITE_CACHE_EXCLUDE_LIST_KEY, 
-      ".*/oldWALs/.*,.*/archive/.*,.*/corrupt/.*,.*/staging/.*");
-    conf.set(SidecarConfig.SIDECAR_CACHING_HINT_DETECTOR_IMPL_KEY, HBaseCachingHintDetector.class.getName());
-    
-    CacheConfig carrotCacheConfig = CacheConfig.getInstance();
-    // Set meta cache 
-    carrotCacheConfig.setCacheMaximumSize(SidecarConfig.META_CACHE_NAME, scMetaCacheSize);
-    carrotCacheConfig.setCacheSegmentSize(SidecarConfig.META_CACHE_NAME, scMetaCacheSegmentSize);
-    switch(scCacheType) {
-      case  MEMORY: 
-        conf = updateConfigurationOffheap(conf); break;
-      case FILE: 
-        conf = updateConfigurationFile(conf); break;
-      case DISABLED:
-        conf = updateConfigurationDisabled(conf);
-      default:
-    }
-  }
-  
-  private static Configuration updateConfigurationDisabled(Configuration conf) {
-    SidecarConfig cacheConfig = SidecarConfig.getInstance();
-    cacheConfig
-      .setDataCacheType(scCacheType)
-      .setDataPageSize(scPageSize)
-      .setIOBufferSize(scIOBufferSize);
-    
-    return getHdfsConfiguration(conf, cacheConfig, CacheConfig.getInstance());
-  }
-  
-  private static Configuration updateConfigurationFile(Configuration conf) {
-    SidecarConfig cacheConfig = SidecarConfig.getInstance();
-    cacheConfig
-      .setDataPageSize(scPageSize)
-      .setIOBufferSize(scIOBufferSize)
-      .setDataCacheType(SidecarDataCacheType.FILE)
-      .setJMXMetricsEnabled(true);
-    
-    cacheConfig.setDataCacheMode(DataCacheMode.NOT_IN_WRITE_CACHE);
-    cacheConfig.setCacheableFileSizeThreshold(100 * (1 << 20)); // 100 MB
-    
-    CacheConfig carrotCacheConfig = CacheConfig.getInstance();
-    
-    carrotCacheConfig.setCacheMaximumSize(SidecarConfig.DATA_CACHE_FILE_NAME, scFileCacheSize);
-    carrotCacheConfig.setCacheSegmentSize(SidecarConfig.DATA_CACHE_FILE_NAME, scFileDataSegmentSize);
-    carrotCacheConfig.setCacheEvictionPolicy(SidecarConfig.DATA_CACHE_FILE_NAME, SLRUEvictionPolicy.class.getName());
-    carrotCacheConfig.setRecyclingSelector(SidecarConfig.DATA_CACHE_FILE_NAME, MinAliveRecyclingSelector.class.getName());
-    carrotCacheConfig.setSLRUInsertionPoint(SidecarConfig.DATA_CACHE_FILE_NAME, 6);
-    if (scACFileEnabled) {
-      carrotCacheConfig.setAdmissionController(SidecarConfig.DATA_CACHE_FILE_NAME, AQBasedAdmissionController.class.getName());
-      carrotCacheConfig.setAdmissionQueueStartSizeRatio(SidecarConfig.DATA_CACHE_FILE_NAME, scACStartRatio);
-    }
-    
-    if (scScavThreads > 1) {
-      carrotCacheConfig.setScavengerNumberOfThreads(SidecarConfig.DATA_CACHE_FILE_NAME, scScavThreads);      
-    }
-    
-    carrotCacheConfig.setVictimCachePromotionOnHit(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteOnHit);
-    carrotCacheConfig.setVictimPromotionThreshold(SidecarConfig.DATA_CACHE_FILE_NAME, rc_victim_promoteThreshold);
-    
-    return getHdfsConfiguration(conf, cacheConfig, carrotCacheConfig);
-  }
-
-  private static Configuration updateConfigurationOffheap(Configuration conf) {
-    SidecarConfig cacheConfig = SidecarConfig.getInstance();
-    cacheConfig
-      .setDataPageSize(scPageSize)
-      .setIOBufferSize(scIOBufferSize)
-      .setDataCacheType(SidecarDataCacheType.MEMORY)
-      .setJMXMetricsEnabled(true);
-    
-    CacheConfig carrotCacheConfig = CacheConfig.getInstance();
-    
-    carrotCacheConfig.setCacheMaximumSize(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, scOffheapCacheSize);
-    carrotCacheConfig.setCacheSegmentSize(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, scOffheapDataSegmentSize);
-    carrotCacheConfig.setCacheEvictionPolicy(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, SLRUEvictionPolicy.class.getName());
-    carrotCacheConfig.setRecyclingSelector(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, MinAliveRecyclingSelector.class.getName());
-    carrotCacheConfig.setSLRUInsertionPoint(SidecarConfig.DATA_CACHE_FILE_NAME, 6);
-    
-    if (scScavThreads > 1) {
-      carrotCacheConfig.setScavengerNumberOfThreads(SidecarConfig.DATA_CACHE_OFFHEAP_NAME, scScavThreads);      
-    }
-    
-    //carrotCacheConfig.setVictimCachePromotionOnHit(SidecarConfig.DATA_CACHE_FILE_NAME, victim_promoteOnHit);
-    //carrotCacheConfig.setVictimPromotionThreshold(SidecarConfig.DATA_CACHE_FILE_NAME, victim_promoteThreshold);
-    
-    return getHdfsConfiguration(conf, cacheConfig, carrotCacheConfig);
-  }
-
-  
-  public static Configuration getHdfsConfiguration(Configuration configuration, 
-      SidecarConfig sidecarConfig, CacheConfig carrotCacheConfig)
-  {
-      for(Entry<Object, Object> e: sidecarConfig.entrySet()) {
-        configuration.set((String) e.getKey(), (String) e.getValue());
-      }
-      Properties p = carrotCacheConfig.getProperties();
-      for(Entry<Object, Object> e: p.entrySet()) {
-        configuration.set((String) e.getKey(), (String) e.getValue());
-      }
-      return configuration;
   }
   
   protected static void createHBaseTables() throws IOException {    
@@ -1325,11 +1187,6 @@ public class HBasePerfTest {
             + "\n      USED SIZE=" + getRawSize()
             + "\n   TOTAL WRITES=" + getTotalWrites());
             //+ "\n  TEST DIR SIZE=" + TestUtils.format(TestUtils.getDirectorySize(testDirPath)));
-        if (scCacheType != SidecarDataCacheType.DISABLED) {
-          Scavenger.printStats();
-          SidecarCachingFileSystem.getDataCache().printStats();
-          SidecarCachingFileSystem.getMetaCache().printStats();  
-        }
       }
     }
   }

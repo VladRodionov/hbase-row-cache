@@ -45,7 +45,7 @@ import org.apache.hadoop.hbase.util.Pair;
 
 // TODO: Auto-generated Javadoc
 /**
- * The Class ScanCacheCoprocessor.
+ * The Class RowCacheCoprocessor.
  * 1. Coprocessor instance is one per table region
  * 2. New instance is created every time the region gets enabled.
  * 3. Call sequence: 

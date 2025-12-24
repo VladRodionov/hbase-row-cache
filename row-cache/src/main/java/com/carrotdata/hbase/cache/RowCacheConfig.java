@@ -52,7 +52,7 @@ public class RowCacheConfig extends Properties {
         
   public final static String DEFAULT_ROWCACHE_JMX_METRICS_ENABLED = "true";
   
-  public final static String DEFAULT_ROWCACHE_JMX_METRICS_DOMAIN_NAME = "HBase-ScanCache";
+  public final static String DEFAULT_ROWCACHE_JMX_METRICS_DOMAIN_NAME = "HBase-RowCache";
   
   public final static String DEFAULT_ROWCACHE_PERSISTENT = "true";
   
@@ -115,6 +115,10 @@ public class RowCacheConfig extends Properties {
     return name.startsWith("rowcache.");
   }
 
+  private static boolean isCarrotPropertyName(String name) {
+    return name.startsWith("cc.");
+  }
+  
   public static String toCarrotPropertyName(CacheType type, String name) {
     switch(type) {
       case MEMORY:
