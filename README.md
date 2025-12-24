@@ -65,7 +65,6 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 * Invalidates cache entry on each mutation operation, which involves this entry (rowkey:family). 
   Each time rowkey:family is updated, the corresponding cache entry is deleted to maintain full consistency.
 * Make sure that your access is read mostly. 
-* Cache compression support is limited. Zstd codec - Linux x86 and Mac OSX x86. 
 * Current version supports Hadoop 2.x only (it can be rebuild with 3.x dependency, but I have not tried it yet). 
 
 ## Known issues
