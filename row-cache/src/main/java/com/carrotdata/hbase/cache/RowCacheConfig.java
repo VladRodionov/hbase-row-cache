@@ -47,9 +47,7 @@ public class RowCacheConfig extends Properties {
   public final static String ROWCACHE_JMX_METRICS_DOMAIN_NAME_KEY ="rowcache.jmx.metrics.domain.name";
   
   public final static String ROWCACHE_PERSISTENT_KEY = "rowcache.persistent";
-  
-  public final static String ROWCACHE_IO_BUFFER_SIZE_KEY = "rowcache.io.buffer.size";
-  
+    
   public final static String ROWCACHE_TYPE_KEY = "rowcache.type";// 'offheap', 'file', 'hybrid'
         
   public final static String DEFAULT_ROWCACHE_JMX_METRICS_ENABLED = "true";
@@ -170,15 +168,6 @@ public class RowCacheConfig extends Properties {
   public boolean isCachePersistent() {
     String value = getProperty(ROWCACHE_PERSISTENT_KEY, DEFAULT_ROWCACHE_PERSISTENT);
     return Boolean.parseBoolean(value);
-  }
- 
-  /**
-   * Get I/O buffer size in bytes
-   * @return I/O buffer size in bytes
-   */
-  public int getIOBufferSize() {
-    String value = getProperty(ROWCACHE_IO_BUFFER_SIZE_KEY, DEFAULT_ROWCACHE_IO_BUFFER_SIZE);
-    return Integer.parseInt(value);
   }
   
   /**

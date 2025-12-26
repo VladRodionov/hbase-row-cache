@@ -126,10 +126,10 @@ public class RowCache {
   /** The Constant LOG. */
   static final Logger LOG = LoggerFactory.getLogger(RowCache.class);
   /*
-   *  Default buffer size is 256K (It does not make sense to cache rows larger
-   *  than 256K anyway.
+   *  Default buffer size is 64K (It does not make sense to cache rows larger
+   *  than 64K anyway.
    */ 
-  public final static int DEFAULT_BUFFER_SIZE = 256 * 1024;
+  public final static int DEFAULT_BUFFER_SIZE = 64 * 1024;
   /*
    *  The byte buffer thread - local storage. 
    */
@@ -301,7 +301,6 @@ public class RowCache {
         return;
       RowCacheConfig rowCacheConfig = RowCacheConfig.fromHadoopConfiguration(cfg);
       RowCache.isPersistentCache = rowCacheConfig.isCachePersistent();
-      RowCache.ioBufferSize = rowCacheConfig.getIOBufferSize();
       cacheType = rowCacheConfig.getCacheType();  
       CacheConfig carrotConfig = CacheConfig.getInstance();
       setCacheType(carrotConfig, cacheType);
@@ -442,7 +441,7 @@ public class RowCache {
     return buf;
   }
 
-  private synchronized void ensureBufferCapacity(int required) {
+  private void ensureBufferCapacity(int required) {
     int currentCapacity = bufTLS.get().capacity();
     if (currentCapacity >= required) {
       return;
