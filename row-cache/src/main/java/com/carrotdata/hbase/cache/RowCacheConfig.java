@@ -35,6 +35,8 @@ public class RowCacheConfig extends Properties {
   private static final long serialVersionUID = 1L;
   
   static final Logger LOG = LoggerFactory.getLogger(RowCacheConfig.class);  
+  
+  public final static String CARROT_CACHE_PREFIX = "cc.";  
 
   public final static String CACHE_MEMORY_NAME = "rowcache-memory";
   
@@ -95,9 +97,9 @@ public class RowCacheConfig extends Properties {
         LOG.info("RowCache "+ name + " value=" + entry.getValue());
 
         config.setProperty(name, entry.getValue());
-      } else if (CacheConfig.isCarrotPropertyName(name)) {
+      } else if (isCarrotPropertyName(name)) {
         LOG.info("Carrot "+ name + " value=" + entry.getValue());
-        carrotConfig.setProperty(name, entry.getValue());
+        carrotConfig.setProperty(name.substring(CARROT_CACHE_PREFIX.length()), entry.getValue());
       }
     }
     return instance;
@@ -116,7 +118,7 @@ public class RowCacheConfig extends Properties {
   }
 
   private static boolean isCarrotPropertyName(String name) {
-    return name.startsWith("cc.");
+    return name.startsWith(CARROT_CACHE_PREFIX);
   }
   
   public static String toCarrotPropertyName(CacheType type, String name) {
@@ -128,6 +130,13 @@ public class RowCacheConfig extends Properties {
       case HYBRID:
       default:
         return null;
+    }
+  }
+  
+  public static void setCarrotProperty(Configuration conf, CacheType type, String propertyName, String value) {
+    String carrotPropertyName = type != null? toCarrotPropertyName(type, propertyName): propertyName;
+    if (carrotPropertyName != null) {
+      conf.set(CARROT_CACHE_PREFIX + carrotPropertyName, value);
     }
   }
   

@@ -36,11 +36,17 @@ import org.apache.hadoop.hbase.client.HTable;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
+import com.carrotdata.cache.io.BlockDataWriter;
+import com.carrotdata.cache.io.BlockFileDataReader;
+import com.carrotdata.cache.io.BlockMemoryDataReader;
 import com.carrotdata.cache.util.CacheConfig;
-import com.carrotdata.hbase.cache.utils.IOUtils;;
+import com.carrotdata.hbase.cache.utils.IOUtils;
+import static com.carrotdata.hbase.cache.utils.LogLevelUtil.setLevel;
 
 
 /**
@@ -94,27 +100,47 @@ public class CoprocessorBaseTest extends BaseTest {
 	
 	@BeforeClass
   public static void setUp() throws Exception {
-	  
+	
     Configuration conf = UTIL.getConfiguration();
+    conf.set("dfs.namenode.audit.loggers", "");
     conf.set(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY, CP_CLASS_NAME);
     conf.set("hbase.zookeeper.useMulti", "false");
     
     dataDir = Files.createTempDirectory("temp");
     
     // Cache configuration
-    conf.set(CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
+    //conf.set(CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
+    RowCacheConfig.setCarrotProperty(conf, null, CacheConfig.CACHE_DATA_DIR_PATHS_KEY, dataDir.toString());
+    
     // Set cache type to 'offheap'
     conf.set(RowCacheConfig.ROWCACHE_TYPE_KEY, cacheType.getType());
     
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    //conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    //  Long.toString(offheapCacheSize));
+    RowCacheConfig.setCarrotProperty(conf, CacheType.MEMORY, CacheConfig.CACHE_MAXIMUM_SIZE_KEY,
       Long.toString(offheapCacheSize));
     
-    conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    //conf.set(RowCacheConfig.toCarrotPropertyName(CacheType.FILE, CacheConfig.CACHE_MAXIMUM_SIZE_KEY),
+    //  Long.toString(fileCacheSize));
+    RowCacheConfig.setCarrotProperty(conf, CacheType.FILE, CacheConfig.CACHE_MAXIMUM_SIZE_KEY,
       Long.toString(fileCacheSize));
+    
+//    RowCacheConfig.setCarrotProperty(conf, CacheType.MEMORY, CacheConfig.CACHE_DATA_WRITER_IMPL_KEY,
+//      BlockDataWriter.class.getName());
+//    RowCacheConfig.setCarrotProperty(conf, CacheType.FILE, CacheConfig.CACHE_DATA_WRITER_IMPL_KEY,
+//      BlockDataWriter.class.getName());
+//    
+//    RowCacheConfig.setCarrotProperty(conf, CacheType.MEMORY, CacheConfig.CACHE_MEMORY_DATA_READER_IMPL_KEY,
+//      BlockMemoryDataReader.class.getName());
+//    
+//    RowCacheConfig.setCarrotProperty(conf, CacheType.FILE, CacheConfig.CACHE_FILE_DATA_READER_IMPL_KEY,
+//      BlockFileDataReader.class.getName());
     
     // Enable snapshot
     UTIL.startMiniCluster(1);
-
+    setLevel("com.carrotdata", Level.INFO);
+    setLevel("org.apache.hadoop", Level.WARN);
+    setLevel(LogManager.ROOT_LOGGER_NAME, Level.ERROR);
     // Row Cache
     if (data != null) return;
     data = generateData(N);

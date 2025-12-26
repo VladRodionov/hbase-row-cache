@@ -1108,6 +1108,10 @@ public class RowCache {
     int keySize = kv.getInt();
     int valueSize = kv.getInt();
     byte[] buf = kv.array();
+    if(isTrace()) {
+      LOG.info(String.format("[row-cache] doPut: keySize=%d valueSize=%d totalSize=%d key=%s", 
+        keySize, valueSize, keySize + valueSize + 8, Bytes.toString(buf, 8, keySize)));
+    }
     return rowCache.put(buf, 8, keySize, buf, 8 + keySize, valueSize, 0);   
   }
 
@@ -1339,6 +1343,11 @@ public class RowCache {
     int off = 4 + keySize;
     int avail = bbuf.length - off;
     long len = rowCache.get(bbuf, 4, keySize, true, bbuf, off);
+    if (isTrace()) {
+      LOG.info("[row-cache] readFamily: table=" + Bytes.toString(tableName)
+          + " row=" + Bytes.toString(row) + " family="
+          + Bytes.toString(columnFamily) + " key=" + Bytes.toString(bbuf, 4, keySize) + " len=" + len);
+    }
     // Check if we have buffer overflow
     while (len > avail) {
       ensureBufferCapacity((int)(len + off));
