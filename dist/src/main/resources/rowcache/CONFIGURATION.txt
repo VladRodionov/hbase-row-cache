@@ -13,7 +13,7 @@ There are only few of RowCache - specific configuration options and majority of 
 
 <property>
 <name>hbase.coprocessor.user.region.classes</name>        
-        <value>com.inclouds.hbase.rowcache.RowCacheCoprocessor</value>
+        <value>com.carrotdata.hbase.cache.RowCacheCoprocessor</value>
 </property>   
 
 
@@ -24,7 +24,7 @@ and is loaded from disk (see 'offheap.blockcache.storage.dir') upon server's sta
 Default is false. (Optional)
    
 <property>
-        <name>offheap.blockcache.persistent</name>
+        <name>rowcache.persistent</name>
         <value>false</value>
 </property>    
 
@@ -68,5 +68,5 @@ Example:
 
 
 
-For the full list of the Carrot Cache configurationoption please refer to the Carrot Cache documentation: https://github.com/carrotdata/carrot-cache
+For the full list of the Carrot Cache configuration options please refer to the Carrot Cache documentation: https://github.com/carrotdata/carrot-cache/wiki/Overview
 
