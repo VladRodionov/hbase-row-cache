@@ -1,27 +1,27 @@
-BigBase 1.0.0 installation instructions
+RowCache installation instructions
 
 Note: Install software on HBase Master host first.
 
-1. Shutdown HBase cluster (If you do an upgrade of HBase to BigBase)
-1. Extract BigBase tar file. 
+1. Shutdown HBase cluster 
+1. Extract rowcache-x.y.z.tar.gz tar file. 
 2. Run install.sh script. (Note: HBASE_HOME MUST be defined)
    
 The installation script will:
 
  2.1 copies all needed library jars into $HBASE_HOME/lib,
- 2.2 copies BigBase shell scripts (rcadmin.sh and synccluster.sh) into $HBASE_HOME/bin directory.
- 2.3 copies BigBase configuration template file into $HBASE_HOME/conf directory.
- 2.4 will update $HBASE_HOME/bin/hbase shell script to include specific BigBase jar files
+ 2.2 copies shell scripts (rcadmin.sh and synccluster.sh) into $HBASE_HOME/bin directory.
+ 2.3 copies Row Cache configuration template file into $HBASE_HOME/conf directory.
+ 2.4 will update $HBASE_HOME/bin/hbase shell script to include specific row cache jar files
 (the copy of previous version of hbase script will be created).
 
 
-3. Modify $HBASE_HOME/conf/hbase-site.xml to include BigBase specific configuration parameters
+3. Modify $HBASE_HOME/conf/hbase-site.xml to include RowCache specific configuration parameters
    (see ./conf/hbase-site.xml.template for the list of parameters and CONFIGURATION manual)
 4. Sync $HBASE_HOME/ across HBase cluster using provided synccluster.sh.
 5. Start HBase cluster.
 
 
-BigBase Row Cache administration
+Row Cache administration
 
 Row cache can be enabled/disabled per table:column_family
 
