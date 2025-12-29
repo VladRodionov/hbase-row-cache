@@ -11,7 +11,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 * GC pauses grow beyond acceptable levels in live enterprise environments due to heap fragmentation. 
 * Unpredictability of GC interruption hurts as well.
 
-## ROW-CACHE
+## Row Cache
 
 * Fast Off Heap ScanCache implementation for HBase (2.x).
 * Its much more efficient than block cache when average read operation size is much less than block size because it does not pollute block cache with data that is not needed. 
@@ -23,7 +23,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 * Implemented as RegionObserver co-processor.
 * Easy installation and configuration. 
 
-## ROW-CACHE (Details)
+## Row Cache (Details)
 
 * It caches data on read (read through cache). 
 * Cache key is table:rowkey:family (table name + row key + column family)
@@ -49,7 +49,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
   [Memory Matters: Benchmarking Caching Servers with Membench](https://medium.com/carrotdata/memory-matters-benchmarking-caching-servers-with-membench-e6e3037aa201) (`Memcarrot` is powered by `Carrot Cache` as well)
 * Our compression is not a simple server-side compression - it is a bit more trickier :)
 
-## PERFORMANCE AND SCALABILITY (Some old numbers, new ones will be coming soon)
+## Performance and Scalability (Some old numbers, new ones will be coming soon)
 
 * GET (small rows < 100 bytes): 175K operations per sec per one Region Server (from cache).
 * MULTI-GET (small rows < 100 bytes): > 1M records per second (network limited) per one Region Server.
@@ -58,7 +58,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 * Horizontal scalability: limited by HBase scalability. 
 
 
-## LIMITATIONS
+## Limitations
 
 * Caches the whole rowkey:family data even if only subset is requested (not a big deal when rows are small).
 * Not suitable for large rows (100s of KB and above).
@@ -80,4 +80,61 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 
 ## How to build
 
-* Run `mvn clean install -DskipTests` for a `hbase-row-cache`. After build is complete you will get the binaries under `dist/target` directory. 
+* Run `mvn clean install -DskipTests` for a `hbase-row-cache`. After build is complete you will get the binaries under `dist/target` directory.
+
+## Installation
+
+Note: Install software on HBase Master host first.
+
+1. Shutdown HBase cluster
+2. Extract rowcache-x.y.z.tar.gz tar file.
+3. Run install.sh script. (Note: HBASE_HOME MUST be defined)
+   
+The installation script will:
+
+* copies all needed library jars into $HBASE_HOME/lib,
+* copies shell scripts (rcadmin.sh and synccluster.sh) into $HBASE_HOME/bin directory.
+* copies Row Cache configuration template file into $HBASE_HOME/conf directory.
+* will update $HBASE_HOME/bin/hbase shell script to include specific row cache jar files
+* (the copy of previous version of hbase script will be created).
+
+
+4. Modify $HBASE_HOME/conf/hbase-site.xml to include RowCache specific configuration parameters
+   (see ./conf/hbase-site.xml.template for the list of parameters and CONFIGURATION manual)
+5. Sync $HBASE_HOME/ across HBase cluster using provided synccluster.sh.
+6. Start HBase cluster.
+
+
+## Administration
+
+Row cache can be enabled/disabled per table:column_family
+
++ To view row cache configuration for a particular table:
+
+```
+$HBASE_HOME/bin/rcadmin.sh status TABLE
+```
+
++ To enable row cache for a table
+
+```
+$HBASE_HOME/bin/rcadmin.sh enable TABLE
+```
+
++ To enable row cache for a table:cf
+
+```
+$HBASE_HOME/bin/rcadmin.sh enable TABLE FAMILY
+```
+
++ To disable row cache for a table
+
+```
+$HBASE_HOME/bin/rcadmin.sh disable TABLE
+```
+
++ To disable row cache for a table:cf
+
+```
+$HBASE_HOME/bin/rcadmin.sh disable TABLE FAMILY  
+```
