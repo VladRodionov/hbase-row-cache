@@ -138,3 +138,93 @@ $HBASE_HOME/bin/rcadmin.sh disable TABLE
 ```
 $HBASE_HOME/bin/rcadmin.sh disable TABLE FAMILY  
 ```
+
+## Configuration
+
+### 1. Introduction
+
+All RowCache - specific configuration options must be defined in hbase-site.xml file. After installation is complete
+you must update hbase-site.xml and sync these files on all HBase cluster's nodes. HBase RowCache is backed by Carrot Cache - high performance,
+memory efficient, hybrid (Memory/SSD) cache. Plese refer to https://github.com/carrotdata/carrot-cache for more information about Carrot Cache.
+
+### 2. RowCache - specific configuration options
+
+There are only few of RowCache - specific configuration options and majority of configuration options come from a Carrot Cache.
+
+#### 2.1 Defines RowCache coprocessor main class
+
+```xml
+<property>
+<name>hbase.coprocessor.user.region.classes</name>        
+        <value>com.carrotdata.hbase.cache.RowCacheCoprocessor</value>
+</property>   
+```
+
+#### 2.2 Is this cache persistent or not.
+
+Persistence in this context means that cache is stored on disk upon region server shutdown
+and is loaded from disk (see 'offheap.blockcache.storage.dir') upon server's start up. 
+Default is false. (Optional)
+
+```xml
+<property>
+        <name>rowcache.persistent</name>
+        <value>false</value>
+</property>    
+```
+
+#### 2.3 Cache type
+
+MEMORY, FILE or HYBRID (MEMORY + FILE). Default: MEMORY
+
+```xml
+<property>
+        <name>rowcache.type</name>
+        <value>MEMORY</value>
+</property>
+```
+
+#### 2.3 Enable/Disable JMX metrics
+
+Default: true
+
+```xml
+<property>
+        <name>rowcache.jmx.metrics.enabled</name>
+        <value>true</value>
+</property>
+```
+
+#### 2.4 JMX domain name
+
+Default: "HBase-RowCache"
+
+```xml
+<property>
+        <name>rowcache.jmx.metrics.domain.name</name>
+        <value>some-name</value>
+</property>
+```
+
+### 3. Carrot Cache configuration
+
+Important: Carrot Cache configuration option names MUST be prefixed with "cc."
+In this example we set size of a MEMORY cache (MEMORY cache name is "rowcache-memory")
+
+```xml
+<property>
+        <name>cc.rowcache-memory.storage.size.max</name>
+        <value>10000000000</value>
+</property>
+```
+
+This one set FILE cache size (FILE cache name is "rowcache-file")
+
+```xml
+<property>
+        <name>cc.rowcache-file.storage.size.max</name>
+        <value>10000000000</value>
+</property>
+```
+
+For the full list of the Carrot Cache configuration options please refer to the Carrot Cache [Documentation](https://github.com/carrotdata/carrot-cache/wiki/Overview)
