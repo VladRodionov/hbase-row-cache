@@ -80,7 +80,7 @@ HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-
 
 ## How to build
 
-* Run `mvn clean install -DskipTests` for a `hbase-row-cache`. After build is complete you will get the binaries under `dist/target` directory.
+Clone repo and checkout the latest release (tag). Run `mvn clean install -DskipTests` for a `hbase-row-cache`. After build is complete you will get the binaries under `dist/target` directory.
 
 ## Installation
 
