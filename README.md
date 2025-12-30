@@ -87,21 +87,21 @@ Clone repo and checkout the latest release (tag). Run `mvn clean install -DskipT
 Note: Install software on HBase Master host first.
 
 1. Shutdown HBase cluster
-2. Extract rowcache-x.y.z.tar.gz tar file.
-3. Run install.sh script. (Note: HBASE_HOME MUST be defined)
+2. Extract `rowcache-x.y.z.tar.gz` tar file.
+3. Run `install.sh` script. (Note: HBASE_HOME MUST be defined)
    
 The installation script will:
 
-* copies all needed library jars into $HBASE_HOME/lib,
-* copies shell scripts (rcadmin.sh and synccluster.sh) into $HBASE_HOME/bin directory.
-* copies Row Cache configuration template file into $HBASE_HOME/conf directory.
-* will update $HBASE_HOME/bin/hbase shell script to include specific row cache jar files
+* copies all needed library jars into `$HBASE_HOME/lib`,
+* copies shell scripts (rcadmin.sh and synccluster.sh) into `$HBASE_HOME/bin` directory.
+* copies Row Cache configuration template file into `$HBASE_HOME/conf` directory.
+* will update `$HBASE_HOME/bin/hbase` shell script to include specific row cache jar files
 * (the copy of previous version of hbase script will be created).
 
 
-4. Modify $HBASE_HOME/conf/hbase-site.xml to include RowCache specific configuration parameters
+4. Modify `$HBASE_HOME/conf/hbase-site.xml` to include RowCache specific configuration parameters
    (see ./conf/hbase-site.xml.template for the list of parameters and CONFIGURATION manual)
-5. Sync $HBASE_HOME/ across HBase cluster using provided synccluster.sh.
+5. Sync `$HBASE_HOME/` across HBase cluster using provided `synccluster.sh`.
 6. Start HBase cluster.
 
 
