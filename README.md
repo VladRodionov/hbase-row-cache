@@ -34,17 +34,17 @@ You can read this Wiki page to get an idea why it is important, especially in di
 * Works best when size of CF is < block size. With default block size of 64KB we are talking about kilobytes - not megabytes.
 * Cached data is invalidated on every mutation for a particular rowkey:family. Every time, the column family is updated/deleted for a given row key, the corresponding entry gets evicted from the cache. 
 * Make sure that your access is read mostly. 
-* The ROW-CACHE can be enabled/disabled per table and per table:family (column family).
-* The setting is visible in HBase shell and HBase UI. There is new ROW_CACHE attribute on a table and table:column.  
-  The table:column settings of ROW_CACHE overwrites table's setting. 
+* The Row Cache can be enabled/disabled per table and per table:family (column family).
+* The setting is visible in HBase shell and HBase UI. There is new ROWCACHE attribute on a table and table:column.  
+  The table:column settings of ROWCACHE overwrites table's setting. 
 * One can enable both: row cache and block cache on a table, but usually it either first or second needs to be enabled.
-* Its very convenient for testing: run test with ROW_CACHE = false, then using provided utility - enable ROW_CACHE and re-run test. 
-* Tables which have random (small) read mostly access pattern will benefit most from ROW-CACHE (make sure disable block cache).
+* Its very convenient for testing: run test with ROWCACHE = false, then using provided utility - enable ROWCACHE and re-run test. 
+* Tables which have random (small) read mostly access pattern will benefit most from Row Cache (make sure disable block cache).
 * Tables, which are accessed in a more predictable sequential way, must have block cache enabled instead. 
 
 ## Memory usage and compression
 
-* ROW-CACHE core caching library [Carrot Cache](https://www.github.com/carrotdata/carrot-cache) is between 2x and 6x more memory efficient than its direct competitors (Caffeine, EHCache)
+* Row Cache core caching library [Carrot Cache](https://www.github.com/carrotdata/carrot-cache) is between 2x and 6x more memory efficient than its direct competitors (Caffeine, EHCache)
   when compressioin is enabled. 
 * It means that you will be able to keep 2-6x more data in a same amount of RAM (compared to a other caches with client-side compression enabled). Clear benefits. 
 * Compression works fine even for small objects (10s - 100s of bytes). Please refer to this blog post for more information about how compression is implemented in `Carrot Cache`:
