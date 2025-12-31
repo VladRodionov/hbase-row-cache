@@ -1,7 +1,7 @@
 # HBase Row Cache
 HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-cache)  and updated to HBase 2.x. This cache is impelemented as HBase co-processor and can be easily installed into any HBase cluster.
 [Apache HBase](https://hbase.apache.org) is an open-source, distributed, versioned, column-oriented store modeled after Google' Bigtable: A Distributed Storage System for Structured Data by Chang et al [link](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf). Just as Bigtable leverages the distributed data storage provided by the Google File System, HBase provides Bigtable-like capabilities on top of [Apache Hadoop](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf). The official HBase still lacks one BigTable feature, namely - Row Cache, which caches frequently requested key-value pairs. This project adds this functionality to Apache HBase. 
-You can read this Wiki page to get an idea why it is important, especially in disagregated storage environments: [HBase: Why Block Cahce Alone Is No Longer Enough In The Cloud](https://cloud.google.com/blog/products/databases/exploring-bigtable-read-throughput-performance-gains)
+You can read this Wiki page to get an idea why it is important, especially in disagregated storage environments: [HBase: Why Block Cache Alone Is No Longer Enough In The Cloud](https://github.com/VladRodionov/hbase-row-cache/wiki/HBase:-Why-Block-Cache-Alone-Is-No-Longer-Enough-in-the-Cloud)
 
 ## Where is the BigTable's Row Cache?
 
