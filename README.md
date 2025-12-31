@@ -1,15 +1,17 @@
 # HBase Row Cache
 HBase Row cache, powered by [Carrot Cache](https://github.com/carrotdata/carrot-cache)  and updated to HBase 2.x. This cache is impelemented as HBase co-processor and can be easily installed into any HBase cluster.
-[Apache HBase](https://hbase.apache.org) is an open-source, distributed, versioned, column-oriented store modeled after Google' Bigtable: A Distributed Storage System for Structured Data by Chang et al [link](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf). Just as Bigtable leverages the distributed data storage provided by the Google File System, HBase provides Bigtable-like capabilities on top of [Apache Hadoop](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf). The official HBase still lacks one BigTable feature, namely - Scan Cache, which caches frequently requested key-value pairs. This project adds this functionality to Apache HBase.   
+[Apache HBase](https://hbase.apache.org) is an open-source, distributed, versioned, column-oriented store modeled after Google' Bigtable: A Distributed Storage System for Structured Data by Chang et al [link](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf). Just as Bigtable leverages the distributed data storage provided by the Google File System, HBase provides Bigtable-like capabilities on top of [Apache Hadoop](https://static.googleusercontent.com/media/research.google.com/en//archive/bigtable-osdi06.pdf). The official HBase still lacks one BigTable feature, namely - Scan Cache, which caches frequently requested key-value pairs. This project adds this functionality to Apache HBase. 
+You can read this Wiki page to get an idea why it is important, especially in disagregated storage environments. [HBase: Why Block Cahce Alone Is Not](https://cloud.google.com/blog/products/databases/exploring-bigtable-read-throughput-performance-gains)
 
-## Where is the BigTable's ScanCache?
+## Where is the BigTable's Row Cache?
 
-* ScanCache in Goggle's BigTable is responsible for caching hot rows data. 
-* It improves read performance when read operation is much smaller than block size (blocks are cached in a block cache)
+* Row Cache in Goggle's BigTable is responsible for caching hot rows data. 
+* It improves read performance when read operation is much smaller than block size (blocks are cached in a block cache) or involves multiple blocks to a fetch a single row
 * This feature is still missing in HBase (as of 2.6.1).  
 * It's very hard to implement in Java as since it puts extreme pressure on GC (when done on heap).
 * GC pauses grow beyond acceptable levels in live enterprise environments due to heap fragmentation. 
 * Unpredictability of GC interruption hurts as well.
+* Reda more about Google row cache in this [blog post](https://cloud.google.com/blog/products/databases/exploring-bigtable-read-throughput-performance-gains).
 
 ## Row Cache
 
