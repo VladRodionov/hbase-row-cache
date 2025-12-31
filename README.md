@@ -11,7 +11,7 @@ You can read this Wiki page to get an idea why it is important, especially in di
 * It's very hard to implement in Java as since it puts extreme pressure on GC (when done on heap).
 * GC pauses grow beyond acceptable levels in live enterprise environments due to heap fragmentation. 
 * Unpredictability of GC interruption hurts as well.
-* Reda more about Google row cache in this [blog post](https://cloud.google.com/blog/products/databases/exploring-bigtable-read-throughput-performance-gains).
+* Read more about Google row cache in this [blog post](https://cloud.google.com/blog/products/databases/exploring-bigtable-read-throughput-performance-gains).
 
 ## Row Cache
 
