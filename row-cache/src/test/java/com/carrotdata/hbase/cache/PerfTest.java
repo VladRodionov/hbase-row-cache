@@ -47,8 +47,8 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.log4j.Logger;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.carrotdata.cache.Cache;
 import com.carrotdata.cache.Scavenger;
 import com.carrotdata.cache.controllers.AQBasedAdmissionController;
@@ -100,10 +100,10 @@ public class PerfTest {
   /** Data size. */
   private static int M = 10000;
   /** The Constant LOG. */
-  private final static Logger LOG = Logger.getLogger(PerfTest.class);
+  static final Logger LOG = LoggerFactory.getLogger(PerfTest.class);
 
   /** The test time. */
-  private static long testTime = 30000;// 3000 secs
+  private static long testTime = 300000;// 3000 secs
 
   /** The write ratio. */
   private static float writeRatio = 0.1f; // 10% puts - 90% gets
@@ -155,7 +155,7 @@ public class PerfTest {
   private static double victim_promoteThreshold = 0.9;
   
   /** Main cache- when this is true, victim promote on hit must be true as well */
-  private static boolean hybridCacheInverseMode = true;
+  private static boolean hybridCacheInverseMode = false;
   
   /* Eviction policy for offheap cache*/
   private static EvictionPolicy offheapEvictionPolicy = EvictionPolicy.SLRU;

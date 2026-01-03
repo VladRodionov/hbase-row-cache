@@ -24,9 +24,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 import java.util.NavigableSet;
-import java.util.Properties;
 import java.util.Random;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -35,7 +33,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.math3.distribution.ZipfDistribution;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.s3a.*;
+import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
@@ -60,13 +58,11 @@ import org.apache.hadoop.hbase.coprocessor.CoprocessorHost;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.log4j.Logger;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.carrotdata.cache.Cache;
 import com.carrotdata.cache.Scavenger;
 import com.carrotdata.cache.controllers.AQBasedAdmissionController;
-import com.carrotdata.cache.controllers.MinAliveRecyclingSelector;
-import com.carrotdata.cache.eviction.SLRUEvictionPolicy;
 import com.carrotdata.cache.util.CacheConfig;
 import com.carrotdata.cache.util.Utils;
 import com.carrotdata.hbase.cache.utils.IOUtils;
@@ -114,7 +110,7 @@ public class HBasePerfTest {
   /** Data size. */
   private static int M = 10000;
   /** The Constant LOG. */
-  private final static Logger LOG = Logger.getLogger(PerfTest.class);
+  static final Logger LOG = LoggerFactory.getLogger(HBasePerfTest.class);
 
   /** The test time. */
   private static long testTime = 3 * 3600000;// 3 hours
@@ -173,7 +169,7 @@ public class HBasePerfTest {
   private static double rc_victim_promoteThreshold = 0.9;
   
   /** Main cache- when this is true, victim promote on hit must be true as well */
-  private static boolean rcHybridCacheInverseMode = true;
+  private static boolean rcHybridCacheInverseMode = false;
   
   /* Eviction policy for offheap cache*/
   private static EvictionPolicy rcOffheapEvictionPolicy = EvictionPolicy.SLRU;
@@ -289,14 +285,14 @@ public class HBasePerfTest {
   /* HBase Admin interface*/
   static Admin admin;
   
-  static boolean hbaseBlockCacheEnabled = false;
+  static boolean hbaseBlockCacheEnabled = true;
   
   static enum TestType{
     LOAD_AND_READ,
     LOAD_THEN_READ
   }
 
-  static TestType testType = TestType.LOAD_AND_READ;
+  static TestType testType = TestType.LOAD_THEN_READ;
   
   /**
    * Minio server access
@@ -473,7 +469,7 @@ public class HBasePerfTest {
     cluster = UTIL.getMiniHBaseCluster();
     testDirPath = Path.of(UTIL.getDataTestDir().toString());
     
-    LOG.error(testDirPath);
+    LOG.error(testDirPath.toString());
     createTables();
     createHBaseTables();
      
